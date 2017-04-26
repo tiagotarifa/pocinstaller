@@ -1,6 +1,22 @@
 #!/bin/bash
+#--------/ Header /-------------------------------------------------------------
+# pocinstaller.sh: Manual or automátic installer for Archlinux (under development)
+#
+# Site		: https://github.com/tiagotarifa/pocinstaller
+# Author	: Tiago Tarifa Munhoz
+# License	: GPL
+#
+#--------/ Description /--------------------------------------------------------
+#     Peace of Cake installer aims to be a easy and fast installer for Arch 
+# Linux. It's allow you to install by filling questions or using a .xml like
+# an argument.(xml is the first idea. If its hard I'll change it)
+#
+#--------/ History /------------------------------------------------------------
+#    Under development
+#
+#--------//---------------------------------------------------------------------
 
-#Initial script to collect and understand necessities of this project
+
 
 CollectingMachineInfo() {
 	#Constants
