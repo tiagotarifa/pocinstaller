@@ -11,12 +11,34 @@
 # Linux. It's allow you to install by filling questions or using a .xml like
 # an argument.(xml is the first idea. If its hard I'll change it)
 #
+#--------/ Important Remarks /--------------------------------------------------
+#     To best view this code use Vim with this configuration settings:
+#  execute pathogen#infect() #optional
+#  set nocompatible
+#  filetype plugin indent on
+#  set foldenable
+#  set foldmethod=marker
+#  au FileType sh let g:sh_fold_enabled=5
+#  au FileType sh let g:is_bash=1
+#  au FileType sh set foldmethod=syntax
+#  syntax on
+#  let g:gruvbox_italic=1	#optional
+#  colorscheme gruvbox		#optional
+#  set background=light
+#  set number
+#  set tabstop=4 
+#  set softtabstop=0 
+#  set noexpandtab
+#  set shiftwidth=4
+#  set foldcolumn=2
+#  set autoindent
+#  set showmode
+#
+#    or you can use Kate software: https://kate-editor.org/
 #--------/ History /------------------------------------------------------------
 #    Under development
 #
 #--------//---------------------------------------------------------------------
-
-
 
 CollectingMachineInfo() {
 	#Constants
@@ -87,6 +109,15 @@ IsInternetAccessible() {
 		return 1
 	fi
 }
+SettingHostname() {
+	local hostnameFile="/mnt/etc/hostname"
+	local hostname="$(dialog	\
+		--stdout				\
+		--inputbox "Hostname" 0 0)"
+
+	#TODO: Set hostname on hostnameFile
+	echo "$hostname"
+}
 PreInstall() {
 	CollectingMachineInfo
 	#MinimalMachineMemoryValidate
@@ -101,7 +132,10 @@ PreInstall() {
 
 	#TODO: Checks need to be done before start 
 	#      from here (mount points, internet, etc.)
-	InstallingBaseSystem
+	#InstallingBaseSystem
+	Locale="$(ChoosingLocale)"
+	SettingHostname
+	SettingRootPassword
 }
 #------/arch.poclib/-----
 ChoosingRepositories() {
@@ -148,10 +182,36 @@ ChoosingConsoleFont() {
 		--stdout \
 		--radiolist "Console Font" 0 0 0' $fontList
 }
+ChoosingLocale() {
+	local localeFile=/mnt/etc/locale.gen
+	local localeList="$(sed -r '
+		/^# /d
+		s/^#//
+		s/([[:alnum:]]) ([[:alnum:]])/\1_\2/g
+		s/ //g
+		/^$/d
+		s/$/ locale off/' "$localeFile")"
+	
+	eval dialog 							\
+		--stdout 							\
+		--separate-output 					\
+		--checklist "Repositories..." 0 0 0 \
+		$localeList
+}
+SettingRootPassword() {
+	local pwd="$(dialog			\
+		--insecure				\
+		--stdout				\
+		--passwordbox "Root Password" 0 0)"
+
+	#TODO: Set root password
+	echo "root pwd -> $pwd"
+}
 SynchronizingClock() {
-	if ntpd -q 2>&1 /dev/null
+	echo "Setting date and time..."
+	if ntpd -q 2>&1 > /dev/null
 	then
-		hwclock -w
+		hwclock --systohc
 	else
 		:	#TODO: Exception treatment
 	fi
