@@ -40,14 +40,18 @@
 #
 #--------//---------------------------------------------------------------------
 
-CollectingMachineInfo() {
-	#Constants
-	readonly MachineMemSize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
-	readonly MountedTargetRoot="$(df --output=target /mnt | grep '/mnt')"
-	readonly MountedTargetBoot="$(df --output=target /mnt/boot | grep '/mnt/boot')"
-	readonly SwapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
-	readonly BootType="$(IsUEFIOrBios)"
-}
+#--------/ Constants /----------------------------------------------------------
+readonly TargetMount="/mnt"
+readonly BootDir="$TargetMount/boot"
+#CollectingMachineInfo
+readonly MachineMemSize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
+readonly MountedRootDir="$(df --output=target "$TargetMount" | grep "$TargetMount")"
+readonly MountedBootDir="$(df --output=target "$TargetMount/boot" | grep "$TargetMount/boot")"
+readonly SwapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
+readonly BootType="$(IsUEFIOrBios)"
+#--------//---------------------------------------------------------------------
+
+#--------/ Checking Functions /-------------------------------------------------
 MinimalMachineMemoryValidate() {
 	local memorySize="$MachineMemSize"
 
@@ -59,23 +63,25 @@ MinimalMachineMemoryValidate() {
 	fi
 }
 IsRootMounted() {
-	local targetRoot="$MountedTargetRoot"
+	local targetMount="$TargetMount"
+	local mountedRootDir="$MountedRootDir"
 
-	if [ "$targetRoot" == '/mnt' ]
+	if [ "$mountedRootDir" == "$targetMount" ]
 	then
-		echo "Root partition is mounted in /mnt."
+		echo "Root partition is mounted in '$targetMount'."
 	else
-		echo "Have you mounted your root partition in '/mnt' ?"
+		echo "Have you mounted your root partition in '$targetMount' ?"
 	fi
 }
 IsBootMounted() {
-	local targetBoot="$MountedTargetBoot"
+	local bootDir="$BootDir"
+	local mountedBootDir="$MountedBootDir"
 
-	if [ "$targetBoot" == '/mnt/boot' ]
+	if [ "$mountedBootDir" == "$bootDir" ]
 	then
-		echo "Boot partition is mounted in /mnt/boot."
+		echo "Boot partition is mounted in '$bootDir'."
 	else
-		echo "Have you mounted your boot partition in '/mnt/boot' ?"
+		echo "Have you mounted your boot partition in '$bootDir' ?"
 	fi
 }
 IsSwapActivated() {
@@ -99,7 +105,7 @@ IsUEFIOrBios() {
 	fi
 
 }
-IsInternetAccessible() {
+IsInternetAvaliable() {
 	local siteToTest="www.archlinux.org"
 
 	if ping -c1 -q "$siteToTest" 2>&1 > /dev/null
@@ -109,36 +115,26 @@ IsInternetAccessible() {
 		return 1
 	fi
 }
-SettingHostname() {
-	local hostnameFile="/mnt/etc/hostname"
-	local hostname="$(dialog	\
-		--stdout				\
-		--inputbox "Hostname" 0 0)"
-
-	#TODO: Set hostname on hostnameFile
-	echo "$hostname"
+RunAllCheckingFunctions() {
+	MinimalMachineMemoryValidate
+	IsRootMounted
+	IsBootMounted
+	IsSwapActivated
+	IsUEFIOrBios
+	IsInternetAvaliable
 }
-PreInstall() {
-	CollectingMachineInfo
-	#MinimalMachineMemoryValidate
-	#IsRootMounted
-	#IsBootMounted
-	#IsSwapActivated
-	IsInternetAccessible && echo "Internet ok"
-	SynchronizingClock
-	Repositories="$(ChoosingRepositories)"
-	Keymap="$(ChoosingKeymap)"
-	ConsoleFont="$(ChoosingConsoleFont)"
+#--------//----------------------------------------------------------------------
 
-	#TODO: Checks need to be done before start 
-	#      from here (mount points, internet, etc.)
-	#InstallingBaseSystem
-	Locale="$(ChoosingLocale)"
-	SettingHostname
-	SettingRootPassword
-}
+#--------/ Installation Process /------------------------------------------------
+RunAllCheckingFunctions
+BeforeInstallationProcess
+InstallationProcess
+AfterInstallationProcess
+#--------//----------------------------------------------------------------------
+
 #------/arch.poclib/-----
-ChoosingRepositories() {
+#--------/ Setting Functions /---------------------------------------------
+SettingRepositories() {
 	local file="/etc/pacman.d/mirrorlist"
 	local repoList="$(sed -n '
 		1,6d				#Remove header
@@ -146,44 +142,51 @@ ChoosingRepositories() {
 		n					#load next line on pattern space (url)
 		G					#attach hold space on parttern space (url \n country)
 		s/\n/ /				#remove "new line" (url country)
-		s/^Server = /"/		#remove garbage
-		s/\$repo.*## /" "/
-		s/$/" off/p
+		s/^Server = /"/		#remove garbage and add double quotes ("url country)
+		s/\$repo.*## /" "/	#separate by double quotes ("url" "country)
+		s/$/" off/p			#("url" "country) --> ("url" "country" off)
 		' $file \
 		| sort -k2)"		#Sort by country
-	eval dialog 							\
+	local definedRepoList="$(eval dialog	\
 		--stdout 							\
-		--separate-output 					\
 		--checklist "Repositories..." 0 0 0 \
-		$repoList
+		$repoList)"
+	echo "definedRepoList -> $definedRepoList"
+	exit
 }
-ChoosingKeymap() {
-	local dir="/usr/share/kbd/keymaps"
+SettingKeymap() {
+	local dir="$TargetMount/usr/share/kbd/keymaps"
 	local keymapList="$(		\
 		find "$dir" 			\
 		-type f 				\
 		-iname "*.map.gz" 		\
 		-printf '%P layout off ')"
 	
-	eval 'dialog \
-		--stdout \
-		--radiolist "Keyboard Layout" 0 0 0' $keymapList
+	local definedKeymap="$(eval 'dialog \
+		--stdout 						\
+		--radiolist "Keyboard Layout" 0 0 0' $keymapList)"
+	echo "definedKeymap -> $definedKeymap"
+	exit
+	#TODO: Set keymap in vconsole.conf
 }
-ChoosingConsoleFont() {
-	local dir="/usr/share/kbd/consolefonts/"
-	local fontList="$(			\
-		find "$dir" 			\
-		-maxdepth 1				\
-		-type f 				\
-		-iname "*.gz" 			\
+SettingConsoleFont() {
+	local dir="$TargetMount/usr/share/kbd/consolefonts/"
+	local fontList="$(	\
+		find "$dir" 	\
+		-maxdepth 1		\
+		-type f 		\
+		-iname "*.gz" 	\
 		-printf '%P font off ')"
 
-	eval 'dialog \
-		--stdout \
-		--radiolist "Console Font" 0 0 0' $fontList
+	local definedFont="$(eval 'dialog	\
+		--stdout 						\
+		--radiolist "Console Font" 0 0 0' $fontList)"
+	echo "definedFont -> $definedFont"
+	exit
+	#TODO: Set font on vconsole.conf
 }
-ChoosingLocale() {
-	local localeFile=/mnt/etc/locale.gen
+SettingLocale() {
+	local localeFile="$TargetMount/etc/locale.gen"
 	local localeList="$(sed -r '
 		/^# /d
 		s/^#//
@@ -192,11 +195,49 @@ ChoosingLocale() {
 		/^$/d
 		s/$/ locale off/' "$localeFile")"
 	
-	eval dialog 							\
+	local definedLocaleList="$(eval dialog	\
 		--stdout 							\
 		--separate-output 					\
 		--checklist "Repositories..." 0 0 0 \
-		$localeList
+		$localeList)"
+	echo "definedLocaleList -> $definedLocaleList"
+	exit
+	#TODO: run locale-gen
+	#TODO: set LANG= in /etc/locale.conf
+}
+SettingTimezone() {
+	local dir="$TargetMount/usr/share/kbd/keymaps"
+	local timezoneList="$(		\
+		find "$dir" 			\
+		-type f 				\
+		-iname "*.map.gz" 		\
+		-printf '%P layout off ')"
+	local definedTimezone="$(eval dialog	\
+		--stdout 							\
+		--separate-output 					\
+		--checklist "Timezone..." 0 0 0 \
+		$timezoneList)"
+	#TODO: Create symbolic link
+	echo "definedTimezone-> $definedTimezone"
+	exit
+}
+SettingHostname() {
+	local hostnameFile="$TargetMount/etc/hostname"
+	local hostname="$(dialog	\
+		--stdout				\
+		--inputbox "Hostname" 0 0)"
+	echo "$hostname" > "$hostnameFile"
+	#TODO: set hostname in /etc/hosts
+}
+SettingBootLoader() {
+	echo ""
+	#TODO: Choose between syslinux or grub and configure then
+}
+GeneratingFstab() {
+	local mountPoint="$TargetMount"
+	local fstab="$mountPoint/etc/fstab"
+
+	genfstab -U "$mountPoint" >> "$fstab" || exit 3
 }
 SettingRootPassword() {
 	local pwd="$(dialog			\
@@ -206,6 +247,7 @@ SettingRootPassword() {
 
 	#TODO: Set root password
 	echo "root pwd -> $pwd"
+	exit
 }
 SynchronizingClock() {
 	echo "Setting date and time..."
@@ -216,18 +258,35 @@ SynchronizingClock() {
 		:	#TODO: Exception treatment
 	fi
 }
+#--------//----------------------------------------------------------------------
+
+#--------/ Installation Functions /---------------------------------------------
 InstallingBaseSystem() {
 	#packages names separate by space
 	local packages="base"
-	local target="/mnt"
+	local target="$TargetMount"
 
 	pacstrap "$target" "$packages" || exit 2
 }
-GeneratingFstab() {
-	local mountPoint="/mnt"
-	local fstab="/mnt/etc/fstab"
+#--------//----------------------------------------------------------------------
 
-	genfstab -U "$mountPoint" >> "$fstab" || exit 3
+#--------/ Installation Functions /---------------------------------------------
+BeforeInstallationProcess() {
+	SettingRepositories
+	SynchronizingClock
 }
+InstallationProcess() {
+	InstallingBaseSystem
+	SettingKeymap
+	SettingConsoleFont
+	SettingLocale
+	SettingTimezone
+	SettingHostname
+	GeneratingFstab
+	SettingRootPassword
+}
+AfterInstallationProcess() {
+	SettingBootLoader
+}
+#--------//----------------------------------------------------------------------
 #----------//------------
-PreInstall
