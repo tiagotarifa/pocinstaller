@@ -37,6 +37,8 @@
 #    or you can use Kate software: https://kate-editor.org/
 #--------/ History /------------------------------------------------------------
 #    Under development
+#	#TODO: Function to backup files
+#	#TODO: Function to set bootloader
 #
 #--------//---------------------------------------------------------------------
 
@@ -48,7 +50,6 @@ readonly MachineMemSize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
 readonly MountedRootDir="$(df --output=target "$TargetMount" | grep "$TargetMount")"
 readonly MountedBootDir="$(df --output=target "$TargetMount/boot" | grep "$TargetMount/boot")"
 readonly SwapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
-readonly BootType="$(IsUEFIOrBios)"
 #--------//---------------------------------------------------------------------
 
 #--------/ Checking Functions /-------------------------------------------------
@@ -125,16 +126,9 @@ RunAllCheckingFunctions() {
 }
 #--------//----------------------------------------------------------------------
 
-#--------/ Installation Process /------------------------------------------------
-RunAllCheckingFunctions
-BeforeInstallationProcess
-InstallationProcess
-AfterInstallationProcess
-#--------//----------------------------------------------------------------------
-
 #------/arch.poclib/-----
-#--------/ Setting Functions /---------------------------------------------
-SettingRepositories() {
+#--------/ Getting Functions /---------------------------------------------------
+GettingRepositories() {
 	local file="/etc/pacman.d/mirrorlist"
 	local repoList="$(sed -n '
 		1,6d				#Remove header
@@ -147,29 +141,25 @@ SettingRepositories() {
 		s/$/" off/p			#("url" "country) --> ("url" "country" off)
 		' $file \
 		| sort -k2)"		#Sort by country
-	local definedRepoList="$(eval dialog	\
+	eval dialog	\
 		--stdout 							\
 		--checklist "Repositories..." 0 0 0 \
-		$repoList)"
-	echo "definedRepoList -> $definedRepoList"
-	exit
+		$repoList
+		#--separator '"! s!^#!!; \\!"'		\
 }
-SettingKeymap() {
+GettingKeymap() {
 	local dir="$TargetMount/usr/share/kbd/keymaps"
-	local keymapList="$(		\
-		find "$dir" 			\
-		-type f 				\
-		-iname "*.map.gz" 		\
+	local keymapList="$(	\
+		find "$dir" 		\
+		-type f 			\
+		-iname "*.map.gz" 	\
 		-printf '%P layout off ')"
 	
-	local definedKeymap="$(eval 'dialog \
-		--stdout 						\
-		--radiolist "Keyboard Layout" 0 0 0' $keymapList)"
-	echo "definedKeymap -> $definedKeymap"
-	exit
-	#TODO: Set keymap in vconsole.conf
+	eval 'dialog \
+		--stdout \
+		--radiolist "Keyboard Layout" 0 0 0' $keymapList
 }
-SettingConsoleFont() {
+GettingConsoleFont() {
 	local dir="$TargetMount/usr/share/kbd/consolefonts/"
 	local fontList="$(	\
 		find "$dir" 	\
@@ -178,14 +168,11 @@ SettingConsoleFont() {
 		-iname "*.gz" 	\
 		-printf '%P font off ')"
 
-	local definedFont="$(eval 'dialog	\
-		--stdout 						\
-		--radiolist "Console Font" 0 0 0' $fontList)"
-	echo "definedFont -> $definedFont"
-	exit
-	#TODO: Set font on vconsole.conf
+	eval 'dialog	\
+		--stdout	\
+		--radiolist "Console Font" 0 0 0' $fontList
 }
-SettingLocale() {
+GettingLocale() {
 	local localeFile="$TargetMount/etc/locale.gen"
 	local localeList="$(sed -r '
 		/^# /d
@@ -195,60 +182,35 @@ SettingLocale() {
 		/^$/d
 		s/$/ locale off/' "$localeFile")"
 	
-	local definedLocaleList="$(eval dialog	\
-		--stdout 							\
-		--separate-output 					\
-		--checklist "Repositories..." 0 0 0 \
-		$localeList)"
-	echo "definedLocaleList -> $definedLocaleList"
-	exit
-	#TODO: run locale-gen
-	#TODO: set LANG= in /etc/locale.conf
+	eval dialog				\
+		--stdout 			\
+		--separate-output	\
+		--checklist "Locales..." 0 0 0 $localeList
 }
-SettingTimezone() {
+GettingTimezone() {
 	local dir="$TargetMount/usr/share/kbd/keymaps"
 	local timezoneList="$(		\
 		find "$dir" 			\
 		-type f 				\
 		-iname "*.map.gz" 		\
 		-printf '%P layout off ')"
-	local definedTimezone="$(eval dialog	\
-		--stdout 							\
-		--separate-output 					\
-		--checklist "Timezone..." 0 0 0 \
-		$timezoneList)"
-	#TODO: Create symbolic link
-	echo "definedTimezone-> $definedTimezone"
-	exit
+	eval dialog				\
+		--stdout 			\
+		--separate-output 	\
+		--checklist "Timezone..." 0 0 0 $timezoneList
 }
-SettingHostname() {
-	local hostnameFile="$TargetMount/etc/hostname"
-	local hostname="$(dialog	\
-		--stdout				\
-		--inputbox "Hostname" 0 0)"
-	echo "$hostname" > "$hostnameFile"
-	#TODO: set hostname in /etc/hosts
+GettingHostname() {
+	dialog			\
+		--stdout	\
+		--inputbox "Hostname" 0 0
 }
-SettingBootLoader() {
-	echo ""
-	#TODO: Choose between syslinux or grub and configure then
+GettingRootPassword() {
+	dialog			\
+		--insecure	\
+		--stdout	\
+		--passwordbox "Root Password" 0 0
 }
-GeneratingFstab() {
-	local mountPoint="$TargetMount"
-	local fstab="$mountPoint/etc/fstab"
-
-	genfstab -U "$mountPoint" >> "$fstab" || exit 3
-}
-SettingRootPassword() {
-	local pwd="$(dialog			\
-		--insecure				\
-		--stdout				\
-		--passwordbox "Root Password" 0 0)"
-
-	#TODO: Set root password
-	echo "root pwd -> $pwd"
-	exit
-}
+#--------/ Installation Functions /---------------------------------------------
 SynchronizingClock() {
 	echo "Setting date and time..."
 	if ntpd -q 2>&1 > /dev/null
@@ -258,9 +220,12 @@ SynchronizingClock() {
 		:	#TODO: Exception treatment
 	fi
 }
-#--------//----------------------------------------------------------------------
+GeneratingFstab() {
+	local mountPoint="$TargetMount"
+	local fstab="$mountPoint/etc/fstab"
 
-#--------/ Installation Functions /---------------------------------------------
+	genfstab -U "$mountPoint" >> "$fstab" || exit 3
+}
 InstallingBaseSystem() {
 	#packages names separate by space
 	local packages="base"
@@ -268,25 +233,43 @@ InstallingBaseSystem() {
 
 	pacstrap "$target" "$packages" || exit 2
 }
-#--------//----------------------------------------------------------------------
-
-#--------/ Installation Functions /---------------------------------------------
+#--------/ Installation /---------------------------------------------
 BeforeInstallationProcess() {
-	SettingRepositories
 	SynchronizingClock
 }
 InstallationProcess() {
+	local repositories="$( GettingRepositories )"
+	local keymap="$( GettingKeymap )"
+	local consoleFont="$( GettingConsoleFont )"
+	local locale="$( GettingLocale )"
+	local timezone="$( GettingTimezone )"
+	local hostname="$( GettingHostname )"
+	local rootPassword="$( GettingRootPassword )"
+
+	SettingRepositories 	"$repositories"
 	InstallingBaseSystem
-	SettingKeymap
-	SettingConsoleFont
-	SettingLocale
-	SettingTimezone
-	SettingHostname
-	GeneratingFstab
-	SettingRootPassword
+	SettingKeymap			"$keymap"
+	SettingConsoleFont		"$consoleFont"
+	SettingLocale			"$locale"
+	SettingTimezone			"$timezone"
+	SettingHostname			"$hostname"
+	GeneratingFstab		
+	SettingRootPassword 	"$rootPassword"
 }
 AfterInstallationProcess() {
 	SettingBootLoader
 }
 #--------//----------------------------------------------------------------------
 #----------//------------
+
+#--------/ Installation Process /------------------------------------------------
+RunAllCheckingFunctions
+read -s -n1 -p "Function RunAllCheckingFunctions performed!"; echo
+BeforeInstallationProcess
+read -s -n1 -p "Function BeforeInstallationProcess performed!"; echo
+exit
+InstallationProcess
+read -s -n1 -p "Function InstallationProcess performed!"; echo
+AfterInstallationProcess
+read -s -n1 -p "Function AfterInstallationProcess performed!"; echo
+#--------//----------------------------------------------------------------------
