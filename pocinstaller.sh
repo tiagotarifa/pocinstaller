@@ -8,8 +8,8 @@
 #
 #--------/ Description /--------------------------------------------------------
 #     Peace of Cake installer aims to be a easy and fast installer for Arch 
-# Linux. It's allow you to install by filling questions or using a .xml like
-# an argument.(xml is the first idea. If its hard I'll change it)
+# Linux. It's allow you to install by filling questions or using a anwser file
+# like an argument.
 #
 #--------/ Important Remarks /--------------------------------------------------
 #     To best view this code use Vim with this configuration settings:
@@ -51,7 +51,7 @@ readonly MountedRootDir="$(df --output=target "$TargetMount" | grep "$TargetMoun
 readonly MountedBootDir="$(df --output=target "$TargetMount/boot" | grep "$TargetMount/boot")"
 readonly SwapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
 #--------//---------------------------------------------------------------------
-
+source arch.poclib.sh
 #--------/ Checking Functions /-------------------------------------------------
 MinimalMachineMemoryValidate() {
 	local memorySize="$MachineMemSize"
@@ -125,119 +125,8 @@ RunAllCheckingFunctions() {
 	IsInternetAvaliable
 }
 #--------//----------------------------------------------------------------------
-
-#------/arch.poclib/-----
-#--------/ Getting Functions /---------------------------------------------------
-GettingRepositories() {
-	local file="/etc/pacman.d/mirrorlist"
-	local repoList="$(sed -n '
-		1,6d				#Remove header
-		h					#keep current line on hold space (country)
-		n					#load next line on pattern space (url)
-		G					#attach hold space on parttern space (url \n country)
-		s/\n/ /				#remove "new line" (url country)
-		s/^Server = /"/		#remove garbage and add double quotes ("url country)
-		s/\$repo.*## /" "/	#separate by double quotes ("url" "country)
-		s/$/" off/p			#("url" "country) --> ("url" "country" off)
-		' $file \
-		| sort -k2)"		#Sort by country
-	eval dialog	\
-		--stdout 							\
-		--checklist "Repositories..." 0 0 0 \
-		$repoList
-		#--separator '"! s!^#!!; \\!"'		\
-}
-GettingKeymap() {
-	local dir="$TargetMount/usr/share/kbd/keymaps"
-	local keymapList="$(	\
-		find "$dir" 		\
-		-type f 			\
-		-iname "*.map.gz" 	\
-		-printf '%P layout off ')"
-	
-	eval 'dialog \
-		--stdout \
-		--radiolist "Keyboard Layout" 0 0 0' $keymapList
-}
-GettingConsoleFont() {
-	local dir="$TargetMount/usr/share/kbd/consolefonts/"
-	local fontList="$(	\
-		find "$dir" 	\
-		-maxdepth 1		\
-		-type f 		\
-		-iname "*.gz" 	\
-		-printf '%P font off ')"
-
-	eval 'dialog	\
-		--stdout	\
-		--radiolist "Console Font" 0 0 0' $fontList
-}
-GettingLocale() {
-	local localeFile="$TargetMount/etc/locale.gen"
-	local localeList="$(sed -r '
-		/^# /d
-		s/^#//
-		s/([[:alnum:]]) ([[:alnum:]])/\1_\2/g
-		s/ //g
-		/^$/d
-		s/$/ locale off/' "$localeFile")"
-	
-	eval dialog				\
-		--stdout 			\
-		--separate-output	\
-		--checklist "Locales..." 0 0 0 $localeList
-}
-GettingTimezone() {
-	local dir="$TargetMount/usr/share/kbd/keymaps"
-	local timezoneList="$(		\
-		find "$dir" 			\
-		-type f 				\
-		-iname "*.map.gz" 		\
-		-printf '%P layout off ')"
-	eval dialog				\
-		--stdout 			\
-		--separate-output 	\
-		--checklist "Timezone..." 0 0 0 $timezoneList
-}
-GettingHostname() {
-	dialog			\
-		--stdout	\
-		--inputbox "Hostname" 0 0
-}
-GettingRootPassword() {
-	dialog			\
-		--insecure	\
-		--stdout	\
-		--passwordbox "Root Password" 0 0
-}
-#--------/ Installation Functions /---------------------------------------------
-SynchronizingClock() {
-	echo "Setting date and time..."
-	if ntpd -q 2>&1 > /dev/null
-	then
-		hwclock --systohc
-	else
-		:	#TODO: Exception treatment
-	fi
-}
-GeneratingFstab() {
-	local mountPoint="$TargetMount"
-	local fstab="$mountPoint/etc/fstab"
-
-	genfstab -U "$mountPoint" >> "$fstab" || exit 3
-}
-InstallingBaseSystem() {
-	#packages names separate by space
-	local packages="base"
-	local target="$TargetMount"
-
-	pacstrap "$target" "$packages" || exit 2
-}
-#--------/ Installation /---------------------------------------------
-BeforeInstallationProcess() {
-	SynchronizingClock
-}
-InstallationProcess() {
+#--------/ Collecting Data /-----------------------------------------------------
+GettingData() {
 	local repositories="$( GettingRepositories )"
 	local keymap="$( GettingKeymap )"
 	local consoleFont="$( GettingConsoleFont )"
@@ -246,27 +135,30 @@ InstallationProcess() {
 	local hostname="$( GettingHostname )"
 	local rootPassword="$( GettingRootPassword )"
 
-	SettingRepositories 	"$repositories"
-	InstallingBaseSystem
-	SettingKeymap			"$keymap"
-	SettingConsoleFont		"$consoleFont"
-	SettingLocale			"$locale"
-	SettingTimezone			"$timezone"
-	SettingHostname			"$hostname"
-	GeneratingFstab		
-	SettingRootPassword 	"$rootPassword"
+	readonly Repositories="$repositories"
+	readonly Keymap="$keymap"
+	readonly ConsoleFont="$consoleFont"
+	readonly Locale="$locale"
+	readonly Timezone="$timezone"
+	readonly Hostname="$hostname"
+	readonly RootPassword="$rootPassword"
+
+	cat <<-_eof_
+	Repositories: ${Repositories//\! s\!\^\#\!\!\; \\\!/ }
+	Keymap: $Keymap
+	ConsoleFont: $ConsoleFont
+	Locale: $Locale
+	Timezone: $Timezone
+	Hostname: $Hostname
+	Root password: $RootPassword
+	_eof_
 }
-AfterInstallationProcess() {
-	SettingBootLoader
-}
-#--------//----------------------------------------------------------------------
-#----------//------------
 
 #--------/ Installation Process /------------------------------------------------
 RunAllCheckingFunctions
 read -s -n1 -p "Function RunAllCheckingFunctions performed!"; echo
-BeforeInstallationProcess
-read -s -n1 -p "Function BeforeInstallationProcess performed!"; echo
+GettingData
+read -s -n1 -p "Function GettingData performed!"; echo
 exit
 InstallationProcess
 read -s -n1 -p "Function InstallationProcess performed!"; echo
