@@ -37,131 +37,46 @@
 #    or you can use Kate software: https://kate-editor.org/
 #--------/ History /------------------------------------------------------------
 #    Under development
-#	#TODO: Function to backup files
-#	#TODO: Function to set bootloader
 #
-#--------//---------------------------------------------------------------------
-
+#--------/ Loading libraries /--------------------------------------------------
+. commonlib.sh
 #--------/ Constants /----------------------------------------------------------
-readonly TargetMount="/mnt"
-readonly BootDir="$TargetMount/boot"
-#CollectingMachineInfo
-readonly MachineMemSize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
-readonly MountedRootDir="$(df --output=target "$TargetMount" | grep "$TargetMount")"
-readonly MountedBootDir="$(df --output=target "$TargetMount/boot" | grep "$TargetMount/boot")"
-readonly SwapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
-#--------//---------------------------------------------------------------------
-source arch.poclib.sh
-#--------/ Checking Functions /-------------------------------------------------
-MinimalMachineMemoryValidate() {
-	local memorySize="$MachineMemSize"
-
-	if [ "$memorySize" -lt 524288 ]
-	then
-		echo "Memory low: $memorySize"
-	else
-		echo "Memory ok: $memorySize"
-	fi
-}
-IsRootMounted() {
-	local targetMount="$TargetMount"
-	local mountedRootDir="$MountedRootDir"
-
-	if [ "$mountedRootDir" == "$targetMount" ]
-	then
-		echo "Root partition is mounted in '$targetMount'."
-	else
-		echo "Have you mounted your root partition in '$targetMount' ?"
-	fi
-}
-IsBootMounted() {
-	local bootDir="$BootDir"
-	local mountedBootDir="$MountedBootDir"
-
-	if [ "$mountedBootDir" == "$bootDir" ]
-	then
-		echo "Boot partition is mounted in '$bootDir'."
-	else
-		echo "Have you mounted your boot partition in '$bootDir' ?"
-	fi
-}
-IsSwapActivated() {
-	local swap="$SwapActive"
-
-	if [ -n "$swap" ]
-	then
-		echo "Swap is on in $swap"
-	else
-		echo "Have you activated you swap partition?"
-	fi
-}
-IsUEFIOrBios() {
-	local dir="/sys/firmware/efi/efivars"
-
-	if [ -d "$dir" ]
-	then
-		echo "uefi"
-	else
-		echo "bios"
-	fi
+readonly BackTitle="Piece of Cake Installer"
+#--------/ Getting Functions /--------------------------------------------------
+GetHostname(){
+	local title="Input a hostname"
+	local text="Spaces, dots or special characters is not allowed"
+	local check errorMessage hostname 
+	while [ "$check" != "ok" ]
+	do
+		errorMessage=""
+		hostname=$(GuiInputBox "$title" "$text") \
+			|| return 1
+		[ "${#hostname}" -gt 64 ] 														\
+			&& errorMessage="* It can't be more than 64 chars"	
+		[ -z "${hostname}" ]	 														\
+			&& errorMessage="* It can't be empty"	
+		grep -Eqs '[[:blank:]]' <<<"$hostname" 											\
+			&& errorMessage="${errorMessage}\n* Spaces is not allowed"
+		grep -Eqs '[[:punct:]]' <<<"$hostname" 											\
+			&& errorMessage="${errorMessage}\n* Punctuation marks is not allowed"
+		grep -Eqs 'á|Á|à|À|ã|Ã|â|Â|é|É|ê|Ê|ü|Ü|í|Í|ó|Ó|õ|Õ|ô|Ô|ú|Ú|ç|Ç' <<<"$hostname" 	\
+			&& errorMessage="${errorMessage}\n* Accented letter is not allowed"
+		if [ -n "$errorMessage" ]
+		then
+			errorMessage="The rules for setting hostname must be respected:\n$errorMessage"
+			GuiMessageBox "Error" "$errorMessage"
+		else
+			GuiYesNo "Your hostname will be:" "\n'$hostname'\n\nContinue?" \
+				&& check="ok"
+		fi
+	done
+	echo "$hostname"
+} 
+GetTimeZone() {
+	local dir="/usr/share/zoneinfo"
+	local timezoneList="$(find "$dir" -type f -printf '%P layout off ')"
+	local timezone="$(
 
 }
-IsInternetAvaliable() {
-	local siteToTest="www.archlinux.org"
 
-	if ping -c1 -q "$siteToTest" 2>&1 > /dev/null
-	then
-		return 0
-	else
-		return 1
-	fi
-}
-RunAllCheckingFunctions() {
-	MinimalMachineMemoryValidate
-	IsRootMounted
-	IsBootMounted
-	IsSwapActivated
-	IsUEFIOrBios
-	IsInternetAvaliable
-}
-#--------//----------------------------------------------------------------------
-#--------/ Collecting Data /-----------------------------------------------------
-GettingData() {
-	local repositories="$( GettingRepositories )"
-	local keymap="$( GettingKeymap )"
-	local consoleFont="$( GettingConsoleFont )"
-	local locale="$( GettingLocale )"
-	local timezone="$( GettingTimezone )"
-	local hostname="$( GettingHostname )"
-	local rootPassword="$( GettingRootPassword )"
-
-	readonly Repositories="$repositories"
-	readonly Keymap="$keymap"
-	readonly ConsoleFont="$consoleFont"
-	readonly Locale="$locale"
-	readonly Timezone="$timezone"
-	readonly Hostname="$hostname"
-	readonly RootPassword="$rootPassword"
-
-	cat <<-_eof_
-	Repositories: ${Repositories//\! s\!\^\#\!\!\; \\\!/ }
-	Keymap: $Keymap
-	ConsoleFont: $ConsoleFont
-	Locale: $Locale
-	Timezone: $Timezone
-	Hostname: $Hostname
-	Root password: $RootPassword
-	_eof_
-}
-
-#--------/ Installation Process /------------------------------------------------
-RunAllCheckingFunctions
-read -s -n1 -p "Function RunAllCheckingFunctions performed!"; echo
-GettingData
-read -s -n1 -p "Function GettingData performed!"; echo
-exit
-InstallationProcess
-read -s -n1 -p "Function InstallationProcess performed!"; echo
-AfterInstallationProcess
-read -s -n1 -p "Function AfterInstallationProcess performed!"; echo
-#--------//----------------------------------------------------------------------
