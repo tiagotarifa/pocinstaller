@@ -69,42 +69,42 @@ GuiYesNo() { #Use: GuiYesNo "Window's Title" "Text to show"
 		--title "$title"			\
 		--yesno "$text" 0 0
 }
-GuiChecklist() { #Use: GuiChecklist "Window's Title" "Text to show" "dialog list"
+GuiChecklist() { #Use: GuiChecklist "Window's Title" "Text to show" "tag [item] status tag [item] status..."
 	local title="$1"
 	local text="$2"
 	shift 2
 	local list="$@"
 	local backTitle="$BackTitle"
-	dialog							\
-		--backtitle "$backTitle"	\
-		--stdout					\
-		--single-quoted				\
-		--title "$title"			\
-		--checklist "$text" 0 0 0 	\
+	#set -x
+	local toCheck="${list%%off*}"
+	local -a check=($toCheck)
+	local additionalParameter
+	[ "${#check[@]}" -lt 2 ] && additionalParameter="--no-items"
+	dialog										\
+		--backtitle "$backTitle"				\
+		--title "$title" $additionalParameter	\
+		--stdout								\
+		--single-quoted							\
+		--checklist "$text" 0 0 0 				\
 		$list
+	#set +x
 }
-GuiRadiolist() { #Use: GuiInputBox "Window's Title" "Text to show" "dialog list"
+GuiRadiolist() { #Use: GuiRadiolist "Window's Title" "Text to show" "tag [item] status tag [item] status..."
 	local title="$1"
 	local text="$2"
 	shift 2
 	local list="$@"
 	local backTitle="$BackTitle"
-	dialog							\
-		--backtitle "$backTitle"	\
-		--stdout					\
-		--title "$title"			\
-		--radiolist "$text" 0 0 0 	\
+	local toCheck="${list%%off*}"
+	local -a check=($toCheck)
+	local additionalParameter
+	[ "${#check[@]}" -lt 2 ] && additionalParameter="--no-items"
+	dialog										\
+		--backtitle "$backTitle"				\
+		--stdout								\
+		--title "$title" $additionalParameter	\
+		--radiolist "$text" 0 0 0 				\
 		$list
-}
-GuiPasswordBox() { #Use: GuiInputBox "Window's Title" "Text to show"
-	local title="$1"
-	local text="$2"
-	local backTitle="$BackTitle"
-	dialog							\
-		--backtitle "$backTitle"	\
-		--stdout					\
-		--title "$title"			\
-		--passwordbox "$text" 0 0
 }
 GuiMenu() { #Use: GuiInputBox "Window's Title" "Text to show" "dialog list"
 	local title="$1"
@@ -119,6 +119,16 @@ GuiMenu() { #Use: GuiInputBox "Window's Title" "Text to show" "dialog list"
 		--title "$title"			\
 		--menu "$text" 0 0 0 		\
 		$list
+}
+GuiPasswordBox() { #Use: GuiPasswordBox "Window's Title" "Text to show"
+	local title="$1"
+	local text="$2"
+	local backTitle="$BackTitle"
+	dialog							\
+		--backtitle "$backTitle"	\
+		--stdout					\
+		--title "$title"			\
+		--passwordbox "$text1" 0 0
 }
 GuiIntro() {
 	local text="Bem vindo"
