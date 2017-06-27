@@ -37,8 +37,7 @@
 #--------/ History /------------------------------------------------------------
 #    Under development
 #
-#--------/ Functions /----------------------------------------------------------
-
+#--------/ "Graphical" User Interface Functions /-------------------------------
 GuiInputBox() { #Use: GuiInputBox "Window's Title" "Text to show"
 	local title="$1"
 	local text="$2"
@@ -69,7 +68,7 @@ GuiYesNo() { #Use: GuiYesNo "Window's Title" "Text to show"
 		--title "$title"			\
 		--yesno "$text" 0 0
 }
-GuiChecklist() { #Use: GuiChecklist "Window's Title" "Text to show" "tag [item] status tag [item] status..."
+GuiChecklist() { #Use: GuiChecklist "Window's Title" "Text to show" "tag1 [item1] status1 tag2 [item2] status2..."
 	local title="$1"
 	local text="$2"
 	shift 2
@@ -144,4 +143,70 @@ GuiIntro() {
 		printf "$text"
 		sleep 1
 	done
+}
+#--------/ Auxiliary functions/-------------------------------
+GetUserName() { #Return Ex.: someonename
+	local title="User"
+	local text="Type the user login name"
+	local errorMessage 
+	local -l userName
+	while [ "$check" != "ok" ]
+	do
+		errorMessage=""
+		userName=$(GuiInputBox "$title" "$text") || return 1
+		[ "${#userName}" -gt 32 ] 														\
+			&& errorMessage="* It can't be more than 32 chars"	
+		[ -z "${userName}" ]	 														\
+			&& errorMessage="* It can't be empty"	
+		grep -Eqs '[[:blank:]]' <<<"$userName" 											\
+			&& errorMessage="${errorMessage}\n* Spaces is not allowed"
+		grep -Eqs '[[:punct:]]' <<<"$userName" 											\
+			&& errorMessage="${errorMessage}\n* Punctuation marks is not allowed"
+		grep -Eqs 'á|Á|à|À|ã|Ã|â|Â|é|É|ê|Ê|ü|Ü|í|Í|ó|Ó|õ|Õ|ô|Ô|ú|Ú|ç|Ç' <<<"$userName" 	\
+			&& errorMessage="${errorMessage}\n* Accented letter is not allowed"
+		if [ -n "$errorMessage" ]
+		then
+			errorMessage="The rules for setting user name must be respected:\n$errorMessage"
+			GuiMessageBox "Error" "$errorMessage"
+		else
+			GuiYesNo "Your user name will be:" "\n'$userName'\n\nContinue?" && check="ok"
+		fi
+	done
+	echo $userName
+}
+GetPassword() { #Use: GetPasword "Text" | Return Ex.: p@ssw0rd
+	local title="Password"
+	local text1="$@"
+	local text2="Type again..."
+	local warnTitle="Alert! Weak password"
+	local warnText="Do you want to continue?"
+	local check password1 password2 warnMessage
+	while [ "$check" != "ok" ]
+	do
+		password1="$(GuiPasswordBox "$title" "$text1")" || return 1
+		password2="$(GuiPasswordBox "$title" "$text2")" || return 1
+		if [ "$password1" != "$password2" ]
+		then
+			GuiMessageBox "Error!" "Passwords does not match!\nPlease try again."
+			continue
+		fi
+		[ "${#password1}" -lt 5 ] \
+			&& warnMessage="* Less than five chars\n"
+		grep -E '[[:punct:]].+[[:punct:]].+[[:punct:]]' <<<"$password1" \
+			|| warnMessage="${warnMessage}* There is no or to few special chars\n"
+		if [ -n "$warnMessage" ]
+		then
+			GuiYesNo "$warnTitle" "${warnMessage}${warnText}" \
+				|| continue
+		fi
+		check="ok"
+	done
+	echo $password1
+}
+GetGroups(){ #Return Ex.: users,audio,video,games,...
+	local title="Groups"
+	local text="Select one or more groups for your user"
+	local groupList="$(sed 's/\:.*$/ off /' /etc/group)"
+	local groups="$(GuiChecklist "$title" "$text" $groupList)"
+	echo ${groups// /,}
 }

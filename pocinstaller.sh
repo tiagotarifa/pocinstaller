@@ -43,7 +43,9 @@
 #--------/ Constants /----------------------------------------------------------
 readonly BackTitle="Piece of Cake Installer"
 #--------/ Getting Functions /--------------------------------------------------
-GetHostname(){
+GetHostname(){ #Return Ex.: mycomputer
+	# Validate and return the hostname typed
+	# Validation made based on man 8 useradd
 	local title="Input a hostname"
 	local text="Spaces, dots or special characters is not allowed"
 	local check errorMessage hostname 
@@ -71,7 +73,7 @@ GetHostname(){
 	done
 	echo "$hostname"
 }
-GetTimeZone() {
+GetTimeZone() { #Return Ex.: America/Sao_Paulo
 	local title="Repositories"
 	local text="Choose a repository next to you"
 	local dir="/usr/share/zoneinfo"
@@ -79,7 +81,7 @@ GetTimeZone() {
 	GuiRadiolist "$title" "$text" $timezoneList	|| return 1
 }
 GetLocale() { #Return Ex.: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
-	# GetLocale change ' ' to '#' in locales names. It's easier to keep in bash
+	# It's change ' ' to '#' in locales names. It's easier to keep in bash
  	# environment. SetLocale will handle with that.
 	local title="Locales"
 	local text="Choose more than one locale if you need it"
@@ -117,7 +119,7 @@ GetConsoleFontMap(){ #Return Ex.: cp737
 		| sort)"
 	GuiRadiolist "$title" "$text" ${fontList//\.uni/''}
 }
-GetKeymap() { #Return Ex.: br-abnt2
+GetKeymap(){ #Return Ex.: br-abnt2
 	local title="Keyboard layout"
 	local text="Select a layout for your keyboard"
 	local dir="/usr/share/kbd/keymaps"
@@ -129,7 +131,7 @@ GetKeymap() { #Return Ex.: br-abnt2
 	local keymap="$(GuiRadiolist "$title" "$text" ${keymapList//.map.gz/})"
 	echo ${keymap##*/}
 }
-GetRepositories() { #Return Ex.: repo1 repo2 repo3 ...
+GetRepositories(){ #Return Ex.: repo1 repo2 repo3 ...
 	local title="Repositories"
 	local text="Select a repositórie next to you"
 	local file="/etc/pacman.d/mirrorlist"
@@ -147,32 +149,41 @@ GetRepositories() { #Return Ex.: repo1 repo2 repo3 ...
 	GuiChecklist "$title" "$text" $repoList
 	#echo "$repoList"
 }
-GetRootPassword() {
-	local title="Root password"
-	local text1="Type password for your root system"
-	local text2="Type again..."
-	local warnTitle="Alert! Weak password"
-	local warnText="Do you want to continue?"
-	local check password1 password2 warnMessage
-	while [ "$check" != "ok" ]
+GetRootPassword(){ #Return Ex.: p@ssw0rd
+	#Yes! It's necessary!
+	#I'm trying to respect rules here!
+	GetPassword "Type a password for root user"
+}
+GetUsers(){ #Return Ex.: -m -s /bin/bash -G users,wheel,games tiago \n p@ssw0rd
+	local titleUser="Users"
+	local textUser="Type your user login"
+	local titleQuestion="Add user"
+	local textQuestion="Do you want to add a ordinary user?"
+	local textQuestionAgain="Do you want to add another ordinary user?"
+	local count=0
+	local user groups 
+	local -a users passwords
+
+	while :
 	do
-		password1="$(GuiPasswordBox "$title" "$text1")" || return 1
-		password2="$(GuiPasswordBox "$title" "$text2")" || return 1
-		if [ "$password1" != "$password2" ]
-		then
-			GuiMessageBox "Error!" "Passwords does not match!\nPlease try again."
-			continue
+		user="" ; groups=""
+		if [ "$count" -eq 0 ]
+		then 
+			GuiYesNo "$title" "$textQuestion" \
+				|| break
+		else
+			GuiYesNo "$title" "$textQuestionAgain" \
+				|| break
 		fi
-		[ "${#password1}" -lt 5 ] \
-			&& warnMessage="* Less than five chars\n"
-		grep -E '[[:punct]].+[[:punct:]].+[[:punct:]]' <<<"$password1" \
-			|| warnMessage="${warnMessage}* There is no or to few special chars\n"
-		if [ -n "$warnMessage" ]
-		then
-			GuiYesNo "$warnTitle" "${warnMessage}${warnText}" \
-				|| continue
-		fi
-		check="ok"
+		user="$(GetUserName)"
+		groups="$(GetGroups)"
+		passwords[$count]="$(GetPassword "Type a password for $user")"
+		users[$count]="-m -s /bin/bash -G $groups $user"
+		let ++count
 	done
-	echo $password1
+	for ((count=0;count<${#users[@]};count++))
+	do
+		echo "${users[$count]}"
+		echo "${passwords[$count]}"
+	done
 }
