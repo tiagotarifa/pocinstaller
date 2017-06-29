@@ -73,9 +73,9 @@ GetHostname(){ #Return Ex.: mycomputer
 	done
 	echo "$hostname"
 }
-GetTimeZone() { #Return Ex.: America/Sao_Paulo
-	local title="Repositories"
-	local text="Choose a repository next to you"
+GetTimezone() { #Return Ex.: America/Sao_Paulo
+	local title="Timezone"
+	local text="Choose a timezone"
 	local dir="/usr/share/zoneinfo"
 	local timezoneList="$(find "$dir" -type f -printf '%P off \n' | sort)"
 	GuiRadiolist "$title" "$text" $timezoneList	|| return 1
@@ -94,6 +94,17 @@ GetLocale() { #Return Ex.: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 		s/$/ off /
 		' "$file")"
 	GuiChecklist "$title" "$text" $timezoneList	|| return 1
+}
+GetLanguage(){ #Use: GetLanguage 
+	local title="Language"
+	local text="Set a language for your system.\n(It's based on your locale choice)"
+	local locales="$1"
+	local temp param
+	for temp in $locales
+	do
+		param="$param $temp off"
+	done
+	GuiRadiolist "$title" "$text" $param
 }
 GetConsoleFont(){ #Return Ex.: lat7a-16
 	local title="Console Fonts"
@@ -133,7 +144,7 @@ GetKeymap(){ #Return Ex.: br-abnt2
 }
 GetRepositories(){ #Return Ex.: repo1 repo2 repo3 ...
 	local title="Repositories"
-	local text="Select a repositórie next to you"
+	local text="Select one or more repositories next to you"
 	local file="/etc/pacman.d/mirrorlist"
 	local repoList="$(sed -rn '
 		/Server|Score/!d
@@ -187,3 +198,80 @@ GetUsers(){ #Return Ex.: -m -s /bin/bash -G users,wheel,games tiago \n p@ssw0rd
 		echo "${passwords[$count]}"
 	done
 }
+#--------/ Menu /--------------------------------------------------
+CollectingDataFromMenu() {
+	local step=Hostname
+	local hostname timezone locale keymap consoleFont consoleFontMap
+	local repositories rootPassword usersList language
+
+	while :
+	do
+		case $step in
+			Hostname) if hostname="$(GetHostname)"
+					  then
+					      step=Timezone
+					  else
+						return 1
+					  fi
+					  ;;
+		    Timezone) if timezone="$(GetTimezone)"
+					  then 
+						  step=Locale
+					  else
+						  step=Hostname
+					  fi
+					  ;;
+			  Locale) if locale="$(GetLocale)"
+				  	  then
+					      step=Language
+					  else
+						  step=Timezone
+					  fi
+					  ;;
+			Language) if language="$(GetLanguage "$locale")"
+				  	  then
+					      step=Keymap
+					  else
+						  step=Locale
+					  fi
+					  ;;
+		      Keymap) if keymap="$(GetKeymap)"
+				  	  then
+					  	  step=Repositories
+					  else
+						  step=Locale
+					  fi
+					  ;;
+		Repositories) if repositories="$(GetRepositories)" 
+					  then 
+					  	  step=RootPassword
+					  else
+						  step=Keymap
+					  fi
+					  ;;
+		RootPassword) if rootPassword="$(GetRootPassword)" 
+					  then 
+						  step=Users
+					  else
+						  step=Repositories
+					  fi
+					  ;;
+			   Users) if usersList="$(GetUsers)"
+			   		  then
+						  break
+					  else
+						 step=RootPassword
+					  fi
+					  ;;
+		esac
+	done
+	echo "hostname--> $hostname"
+	echo "timezone--> $timezone"
+	echo "locale--> $locale"
+	echo "language--> $language"
+	echo "keymap--> $keymap"
+	echo "repositories--> $repositories"
+	echo "rootPassowrd--> $rootPassword"
+	echo "usersList--> $usersList"
+}
+CollectingDataFromMenu
