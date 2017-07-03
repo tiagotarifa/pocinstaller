@@ -42,236 +42,91 @@
 . commonlib.sh
 #--------/ Constants /----------------------------------------------------------
 readonly BackTitle="Piece of Cake Installer"
-#--------/ Getting Functions /--------------------------------------------------
-GetHostname(){ #Return Ex.: mycomputer
-	# Validate and return the hostname typed
-	# Validation made based on man 8 useradd
-	local title="Input a hostname"
-	local text="Spaces, dots or special characters is not allowed"
-	local check errorMessage hostname 
-	while [ "$check" != "ok" ]
-	do
-		errorMessage=""
-		hostname=$(GuiInputBox "$title" "$text") || return 1
-		[ "${#hostname}" -gt 64 ] 														\
-			&& errorMessage="* It can't be more than 64 chars"	
-		[ -z "${hostname}" ]	 														\
-			&& errorMessage="* It can't be empty"	
-		grep -Eqs '[[:blank:]]' <<<"$hostname" 											\
-			&& errorMessage="${errorMessage}\n* Spaces is not allowed"
-		grep -Eqs '[[:punct:]]' <<<"$hostname" 											\
-			&& errorMessage="${errorMessage}\n* Punctuation marks is not allowed"
-		grep -Eqs 'á|Á|à|À|ã|Ã|â|Â|é|É|ê|Ê|ü|Ü|í|Í|ó|Ó|õ|Õ|ô|Ô|ú|Ú|ç|Ç' <<<"$hostname" 	\
-			&& errorMessage="${errorMessage}\n* Accented letter is not allowed"
-		if [ -n "$errorMessage" ]
-		then
-			errorMessage="The rules for setting hostname must be respected:\n$errorMessage"
-			GuiMessageBox "Error" "$errorMessage"
-		else
-			GuiYesNo "Your hostname will be:" "\n'$hostname'\n\nContinue?" && check="ok"
-		fi
-	done
-	echo "$hostname"
-}
-GetTimezone() { #Return Ex.: America/Sao_Paulo
-	local title="Timezone"
-	local text="Choose a timezone"
-	local dir="/usr/share/zoneinfo"
-	local timezoneList="$(find "$dir" -type f -printf '%P off \n' | sort)"
-	GuiRadiolist "$title" "$text" $timezoneList	|| return 1
-}
-GetLocale() { #Return Ex.: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
-	# It's change ' ' to '#' in locales names. It's easier to keep in bash
- 	# environment. SetLocale will handle with that.
-	local title="Locales"
-	local text="Choose more than one locale if you need it"
-	local file="/etc/locale.gen"
-	local timezoneList="$(sed -r '
-		/^#[a-z]/!d 
-		s/^#//
-		s/  $//
-		s/ /#/g
-		s/$/ off /
-		' "$file")"
-	GuiChecklist "$title" "$text" $timezoneList	|| return 1
-}
-GetLanguage(){ #Use: GetLanguage 
-	local title="Language"
-	local text="Set a language for your system.\n(It's based on your locale choice)"
-	local locales="$1"
-	local temp param
-	for temp in $locales
-	do
-		param="$param $temp off"
-	done
-	GuiRadiolist "$title" "$text" $param
-}
-GetConsoleFont(){ #Return Ex.: lat7a-16
-	local title="Console Fonts"
-	local text="Select a font for your console (It's not for Xorg)"
-	local dir="/usr/share/kbd/consolefonts/"
-	local fontList="$(find "$dir" 	\
-		-maxdepth 1					\
-		-type f 					\
-		-iname "*.gz" 				\
-		-printf '%P off \n' \
-		| sort | sed -r 's/(.psfu?|.cp)?.gz//')"
-	GuiRadiolist "$title" "$text" $fontList
-}
-GetConsoleFontMap(){ #Return Ex.: cp737
-	local title="Console Font Map"
-	local text="Select a Map for your font(It's not for Xorg)"
-	local dir="/usr/share/kbd/unimaps/"
-	local fontList="$(find "$dir" 	\
-		-maxdepth 1					\
-		-type f 					\
-		-iname "*.uni" 				\
-		-printf '%P off \n' \
-		| sort)"
-	GuiRadiolist "$title" "$text" ${fontList//\.uni/''}
-}
-GetKeymap(){ #Return Ex.: br-abnt2
-	local title="Keyboard layout"
-	local text="Select a layout for your keyboard"
-	local dir="/usr/share/kbd/keymaps"
-	local keymapList="$(find "$dir" 		\
-		-type f 							\
-		-iname "*.map.gz" 					\
-		-printf '%P off ' 					\
-		| sort )"
-	local keymap="$(GuiRadiolist "$title" "$text" ${keymapList//.map.gz/})"
-	echo ${keymap##*/}
-}
-GetRepositories(){ #Return Ex.: repo1 repo2 repo3 ...
-	local title="Repositories"
-	local text="Select one or more repositories next to you"
-	local file="/etc/pacman.d/mirrorlist"
-	local repoList="$(sed -rn '
-		/Server|Score/!d
-		h
-		n
-		G
-		s/\n/ /
-		s/#?Server = http:\/\///
-		s/ /_/5g
-		s/$/ off / 
-		s/\/\$repo.+,//p 
-		' $file | sort -k2)"		#Sort by country
-	GuiChecklist "$title" "$text" $repoList
-	#echo "$repoList"
-}
-GetRootPassword(){ #Return Ex.: p@ssw0rd
-	#Yes! It's necessary!
-	#I'm trying to respect rules here!
-	GetPassword "Type a password for root user"
-}
-GetUsers(){ #Return Ex.: -m -s /bin/bash -G users,wheel,games tiago \n p@ssw0rd
-	local titleUser="Users"
-	local textUser="Type your user login"
-	local titleQuestion="Add user"
-	local textQuestion="Do you want to add a ordinary user?"
-	local textQuestionAgain="Do you want to add another ordinary user?"
-	local count=0
-	local user groups 
-	local -a users passwords
-
-	while :
-	do
-		user="" ; groups=""
-		if [ "$count" -eq 0 ]
-		then 
-			GuiYesNo "$title" "$textQuestion" \
-				|| break
-		else
-			GuiYesNo "$title" "$textQuestionAgain" \
-				|| break
-		fi
-		user="$(GetUserName)"
-		groups="$(GetGroups)"
-		passwords[$count]="$(GetPassword "Type a password for $user")"
-		users[$count]="-m -s /bin/bash -G $groups $user"
-		let ++count
-	done
-	for ((count=0;count<${#users[@]};count++))
-	do
-		echo "${users[$count]}"
-		echo "${passwords[$count]}"
-	done
-}
 #--------/ Menu /--------------------------------------------------
-CollectingDataFromMenu() {
+CollectingDataFromMenu(){
 	local step=Hostname
-	local hostname timezone locale keymap consoleFont consoleFontMap
-	local repositories rootPassword usersList language
+	local -x hostname timezone locale keymap consoleFont consoleFontMap
+	local -x repositories rootPassword usersList language whereAmI
 
 	while :
 	do
+		whereAmI="Hostname-Timezone-Locale-Language-Keymap-Repositories-Root_Password-Users\Zn"
 		case $step in
-			Hostname) if hostname="$(GetHostname)"
+			Hostname) whereAmI="${whereAmI/Hostname/\\Z1Hostname\\Z3}"
+					  if hostname="$(GetHostname)"
 					  then
 					      step=Timezone
 					  else
-						return 1
+						  return 1
 					  fi
 					  ;;
-		    Timezone) if timezone="$(GetTimezone)"
+		    Timezone) whereAmI="${whereAmI/Timezone/\\Z1Timezone\\Z3}"
+					  if timezone="$(GetTimezone)"
 					  then 
 						  step=Locale
 					  else
 						  step=Hostname
 					  fi
 					  ;;
-			  Locale) if locale="$(GetLocale)"
+			  Locale) whereAmI="${whereAmI/Locale/\\Z1Locale\\Z3}"
+					  if locale="$(GetLocale)"
 				  	  then
 					      step=Language
 					  else
 						  step=Timezone
 					  fi
 					  ;;
-			Language) if language="$(GetLanguage "$locale")"
+			Language) whereAmI="${whereAmI/Language/\\Z1Language\\Z3}"
+					  if language="$(GetLanguage "$locale")"
 				  	  then
 					      step=Keymap
 					  else
 						  step=Locale
 					  fi
 					  ;;
-		      Keymap) if keymap="$(GetKeymap)"
+		      Keymap) whereAmI="${whereAmI/Keymap/\\Z1Keymap\\Z3}"
+					  if keymap="$(GetKeymap)"
 				  	  then
 					  	  step=Repositories
 					  else
 						  step=Locale
 					  fi
 					  ;;
-		Repositories) if repositories="$(GetRepositories)" 
+		Repositories) whereAmI="${whereAmI/Repositories/\\Z1Repositories\\Z3}"
+					  if repositories="$(GetRepositories)" 
 					  then 
 					  	  step=RootPassword
 					  else
 						  step=Keymap
 					  fi
 					  ;;
-		RootPassword) if rootPassword="$(GetRootPassword)" 
+		RootPassword) whereAmI="${whereAmI/Root_Password/\\Z1Root_Password\\Z3}"
+					  if rootPassword="$(GetRootPassword)" 
 					  then 
 						  step=Users
 					  else
 						  step=Repositories
 					  fi
 					  ;;
-			   Users) if usersList="$(GetUsers)"
+			   Users) whereAmI="${whereAmI/Users/\\Z1Users\\Z3}"
+					  if usersList="$(GetUsers)"
 			   		  then
+						  step=Summary
+					  else
+						  step=RootPassword
+					  fi
+					  ;;
+			 Summary) whereAmI='Start_Again<-\Z1Summary\Z3->Create_Answer_File'
+					  if GetSummary
+				 	  then
 						  break
 					  else
-						 step=RootPassword
+						  hostname='' timezone='' locale='' language=''
+						  keymap='' repositories='' rootPassword='' usersList=''
+						  step=Hostname
 					  fi
 					  ;;
 		esac
 	done
-	echo "hostname--> $hostname"
-	echo "timezone--> $timezone"
-	echo "locale--> $locale"
-	echo "language--> $language"
-	echo "keymap--> $keymap"
-	echo "repositories--> $repositories"
-	echo "rootPassowrd--> $rootPassword"
-	echo "usersList--> $usersList"
 }
 CollectingDataFromMenu
