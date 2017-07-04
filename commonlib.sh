@@ -124,8 +124,8 @@ GuiChecklist(){ #Use: GuiChecklist "Window's Title" "Text to show" "tag1 [item1]
 		--backtitle "$backTitle"				\
 		--title "$title" $additionalParameter	\
 		--aspect 80								\
+		--separate-output						\
 		--stdout $hline							\
-		--single-quoted							\
 		--checklist "$text" 0 $cols 0			\
 		$list
 }
@@ -216,11 +216,24 @@ GuiMenu(){ #Use: GuiInputBox "Window's Title" "Text to show" "dialog list"
 	shift 2
 	local list="$@"
 	local backTitle="$BackTitle"
+
+	#Display a status on botton and fix size problem
+	if [ -n "$whereAmI" ]
+	then 
+		local hline="--colors --hline $whereAmI"
+		local displayCols=$(tput cols)
+		cols=$displayCols
+		[ "$displayCols" -gt 85 ] && cols=85
+		[ "$displayCols" -lt 81 ] && cols=80
+	fi
+
 	dialog							\
 		--backtitle "$backTitle"	\
-		--stdout					\
+		--aspect 80					\
+		--stdout $hline				\
 		--no-tags					\
-		--title "$title"			\
+		--no-items					\
+		--title "$title" 			\
 		--menu "$text" 0 0 0 		\
 	$list
 }
@@ -239,7 +252,7 @@ GuiIntro(){
 		sleep 1
 	done
 }
-#--------/ Auxiliary functions/-------------------------------------------------
+#--------/ Auxiliary for getting functions/-------------------------------------
 GetUserName(){ #Return: someonename
 	local title="User"
 	local text="Type the user login name"
@@ -269,7 +282,7 @@ GetUserName(){ #Return: someonename
 	done
 	echo $userName
 }
-GetPassword(){ #Use: GetPasword "Text" | Return Ex.: p@ssw0rd
+GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 	local title="Password"
 	local text="$@"
 	local textAgain="Type again..."
@@ -378,6 +391,7 @@ GetLocale(){ #Return: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 	local title="Locales"
 	local text="Choose more than one locale if you need it"
 	local file="/etc/locale.gen"
+	local timezones
 	local timezoneList="$(sed -r '
 		/^#?[a-z]/!d 
 		s/^#//
@@ -385,7 +399,8 @@ GetLocale(){ #Return: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 		s/ /#/g
 		s/$/ off /
 		' "$file")"
-	GuiChecklist "$title" "$text" $timezoneList	|| return 1
+		timezones="$(GuiChecklist "$title" "$text" $timezoneList)" || return 1
+		echo "${timezones//\#/ }"
 }
 GetLanguage(){ #Use: GetLanguage 
 	local title="Language"
@@ -442,9 +457,11 @@ GetKeymap(){ #Return: br-abnt2
 	done
 	echo ${keymap##*/}
 }
-GetRepositories(){ #Return: repo1 repo2 repo3 ...
+GetRepositories(){ #Return: repo1 repo2 repo3 ... [custom->repoCustom]
 	local title="Repositories"
 	local text="Select one or more repositories next to you"
+	local titleCustomRepo="Custom Repository"
+	local textCustomRepo="Type your custom repository here:"
 	local file="/etc/pacman.d/mirrorlist"
 	local repositories
 	local repoList="$(sed -rn '
@@ -462,14 +479,20 @@ GetRepositories(){ #Return: repo1 repo2 repo3 ...
 	do
 		repositories="$(GuiChecklist "$title" "$text" $repoList)" || return 1
 	done
-	echo $repositories
+
+	if GuiYesNo "Custom Repository" 'Do you wanna add a custom repository?'
+	then
+		echo "$repositories 'custom->$(GuiInputBox "$titleCustomRepo" "$textCustomRepo")'"
+	else
+		echo "$repositories"
+	fi
 }
 GetRootPassword(){ #Return: p@ssw0rd
 	#Yes! It's necessary!
 	#I'm trying to respect rules here!
 	echo "root:$(GetPassword "Type a password for root user")"
 }
-GetUsers(){ #Return: -m -s /bin/bash -G users,wheel,games tiago password='p@ssw0rd'
+GetUsers(){ #Return: -m -s /bin/bash -G users,wheel,games tiago:passwordcrypted
 	local titleUser="Users"
 	local textUser="Type your user login"
 	local titleQuestion="Add user"
@@ -527,4 +550,195 @@ GetSummary(){ #Display all data collected
 	_eof_
 	)"
 	GuiSummary "$title" "$text\n$summary" > /dev/null 2>&1
+}
+#--------/ Auxiliary for setting functions/-------------------------------------
+GetEthernetDevice(){ #Return: enp2s0
+	local title="Ethernet card"
+	local text="Configuration of ethernet card"
+	# TODO: Make a better sed code here
+	local wifiDevFilter="$(sed -r '
+			/^[[:alnum:]]+:/!d
+			s/(^[[:alnum:]]+):.*/\1/
+			' /proc/net/wireless \
+			| tr '\n' '|')"
+	local ethernetList="$(sed -r '
+			/^[[:alnum:]]+:/!d
+			s/(^[[:alnum:]]+):.*/\1/
+			' /proc/net/dev \
+			| grep -v "${wifiDevFilter%|}")"
+	if [ "$(wc -l <<<"$ethernetList")" -lt 2 ] 
+	then 
+		echo "${ethernetList/ off/}"
+	else
+		GuiMenu "$title" "$text" $ethernetList
+	fi
+}
+GetWifiDevice(){ #Return: wlp2s0
+	local title="Ethernet card"
+	local text="Configuration of ethernet card"
+	# TODO: Make a better sed code here
+	local wifiDevList="$(sed -r '
+			/^[[:alnum:]]+:/!d
+			s/(^[[:alnum:]]+):.*/\1/
+			' /proc/net/wireless)"
+	if [ "$(wc -l <<<"$wifiDevList")" -lt 2 ] 
+	then 
+		echo "${wifiDevList/ off/}"
+	else
+		GuiMenu "$title" "$text" $wifiDevList
+	fi
+}
+SetDHCP(){ #Use: SetDHCP <enp2s0|wlp2s0>
+	local device="$1"
+	local titleError="Error"
+	local textError1="dhcpcd or dhclient not found! Try Fixed IP..."
+	local textError2="Could not set DHCP address for $device! Try Fixed IP..."
+	local titleSuccess="DHCP"
+	local textSuccess="DHCP returns this ip address for $device"
+	local ip
+	local dhcpReleaseCommand="$(type -p dhcpcd) -k" \
+		|| local dhcpReleaseCommand="$(type -p dhclient) -r"
+	if [ -z "${dhcpReleaseCommand%-*}" ]
+	then
+		GuiMessage "$titleError" "$textError"
+		return 1
+	else
+		eval $dhcpReleaseCommand $device
+		local dhcpCommand="${dhcpReleaseCommand%-*}"
+	fi
+	eval $dhcpCommand $device
+	if [ $? -eq 0 ]
+	then
+		ip="$(ip addr show $device \
+			| grep -Eo -m1 '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}/(8|16|24)')"
+		GuiMessageBox "$titleSuccess" "$textSuccess\nIP: $ip\n"
+	else
+		GuiMessageBox "$titleError" "$textError2"
+		return 1
+	fi
+}
+SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
+	local device="$1"
+	local step=IP
+	local ip gateway dns 
+	while :
+	do
+		case $step in
+			IP)
+				ip=''
+				ip="$(GuiInputBox "Set IP" "Type ip/mask Example: 192.168.15.10/16")" \
+					|| return 1
+				if ip="$(grep -Eo '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}/(8|16|24)' <<<"$ip")"
+				then
+					step=Gateway
+				else
+					GuiMessageBox "Error" "It's a not valid IP address. Try again"
+				fi
+				;;
+	   Gateway)
+				gateway=''
+				gateway="$(GuiInputBox "Set Gateway" "Type gateway address Example: 192.168.15.1")" \
+					|| step=IP
+				if gateway="$(grep -Eo '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}' <<<"$gateway")"
+				then
+					step=DNS
+				else
+					GuiMessageBox "Error" "It's a not valid IP address. Try again"
+				fi
+				;;
+		   DNS)
+				dns=''
+				dns="$(GuiInputBox "Set DNS" "Type DNS address Example: 8.8.8.8")" \
+					|| step=Gateway
+				if dns="$(grep -Eo '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}' <<<"$dns")"
+				then
+					break
+				else
+					GuiMessageBox "Error" "It's a not valid IP address. Try again"
+				fi
+				;;
+		esac
+	done
+	echo ip addr flush dev $device
+	echo ip addr add $ip dev $device
+	echo ip route add default via $gateway dev $device
+	echo "nameserver $dns" > /tmp/resolv.conf
+	#if ping -c1 $gateway
+	if [ -d /tmp ]
+	then
+		GuiMessageBox "Congratulations" "Your lan is configured:\nIP:$ip\nGateway:$gateway\nDNS:$dns"
+	else
+		GuiMessageBox "Error" "I can't communicate with your gateway ($gateway)!\nCheck you lan configuration"
+		return 1
+	fi
+}
+SetEthernet() { #Use: SetEthernet ethernetDeviceName
+	local device="$1"
+	local title="Ethernet"
+	local text="Select a way to set up '$device'"
+	local choice="$(GuiMenu "$title" "$text" 'DHCP Fixed_Address')"
+	case $choice in
+				 DHCP) SetDHCP "$device"	;;
+		Fixed_Address) SetFixedIP "$device"	;;
+	esac
+}
+SetWireless() { #Use: SetWireless wirelessDeviceName
+	local device="$1"
+	local title="Wireless"
+	local wpaConfig="/etc/wpa_supplicant/${device}.conf"
+	local gb1 gb2 gb3 quality wifi wifiList wifiSelected networkID wifiPassword
+
+	echo -e "ctrl_interface=/run/wpa_supplicant\nupdate_config=1" > "$wpaConfig"
+	if wpa_supplicant -B -i $device -c $wpaConfig
+	then
+		while :
+		do
+			wifiList=''
+			wpa_cli scan > /dev/null 2>&1
+			while read gb1 gb2 quality gb3 wifi
+			do
+				wifiList="$wifiList $wifi ${quality#-} off"
+			done < <(wpa_cli scan_results | grep -E '^[[:alnum:]][[:alnum:]]:')
+			wifiSelected="$(GuiRadiolist "$title" "Select a wireless lan" "$wifiList")" \
+				&& break
+		done
+	else
+		local textError="wpa_supplicant gave a error when it's tried to start."
+		GuiMessageBox "Error" "$textError"
+	fi
+	wifiPassword="$(GuiPasswordBox "$title" "Input a password for '$wifiSelected'")"
+	networkID="$(wpa_cli -i "$device" add_network)"
+	wpa_cli -i "$device" set_network $networkID ssid \"$wifiSelected\"
+	wpa_cli -i "$device" set_network $networkID psk \"$wifiPassword\"
+	wpa_cli -i "$device" enable_network $networkID
+	wpa_cli -i "$device" save_config
+	SetDHCP "$device"
+}
+#--------/ Setting Functions /--------------------------------------------------
+SetNetworkConfiguration(){ #Set up the network for installation
+	local title="Network"
+	local text="Configure your network for installation"
+	local ethernetDevice="$(GetEthernetDevice)"
+	local wifiDevice="$(GetWifiDevice)"
+	local choice
+
+	if ping -c1 www.asdasjef.com.br > /dev/null 2>&1 
+	then
+		return 0
+	else
+		GuiYesNo "$title" "Do you want to configure lan?" \
+			|| return 1
+	fi
+	choice="$(GuiMenu "$title" "$text" "Ethernet Wireless")"
+	case $choice in
+		Ethernet) SetEthernet "$ethernetDevice" ;;
+		Wireless) SetWireless "$wifiDevice" ;;
+	esac
+}
+#--------/ Answer file /--------------------------------------------------------
+MakeAnswerFile(){
+	local answerFile="/tmp/arquivo.cfg"
+	eval 'cat <<-_eof_ >"$answerFile"
+	'"$(cat server_profile.cfg)"'	
+	_eof_'
 }

@@ -42,11 +42,11 @@
 . commonlib.sh
 #--------/ Constants /----------------------------------------------------------
 readonly BackTitle="Piece of Cake Installer"
-#--------/ Menu /--------------------------------------------------
+#--------/ Main Functions /-----------------------------------------------------
 CollectingDataFromMenu(){
 	local step=Hostname
 	local -x hostname timezone locale keymap consoleFont consoleFontMap
-	local -x repositories rootPassword usersList language whereAmI
+	local -x repositories rootPassword usersList usersPassword language whereAmI
 
 	while :
 	do
@@ -111,6 +111,7 @@ CollectingDataFromMenu(){
 			   Users) whereAmI="${whereAmI/Users/\\Z1Users\\Z3}"
 					  if usersList="$(GetUsers)"
 			   		  then
+						  usersPassword="$(grep -Eo '[[:alnum:]]{1,}:.+$'<<<"$usersList")"
 						  step=Summary
 					  else
 						  step=RootPassword
@@ -121,12 +122,13 @@ CollectingDataFromMenu(){
 				 	  then
 						  break
 					  else
-						  hostname='' timezone='' locale='' language=''
+						  hostname='' timezone='' locale='' language='' usersPassword=''
 						  keymap='' repositories='' rootPassword='' usersList=''
 						  step=Hostname
 					  fi
 					  ;;
 		esac
 	done
+	MakeAnswerFile
 }
 CollectingDataFromMenu
