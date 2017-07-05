@@ -72,6 +72,7 @@ GuiMessageBox(){ #Use: GuiMessageBox "Window's Title" "Text to show"
 	fi
 	dialog							\
 		--backtitle "$backTitle"	\
+		--trim						\
 		--aspect 80					\
 		--stdout $hline				\
 		--title "$title"			\
@@ -91,9 +92,36 @@ GuiYesNo(){ #Use: GuiYesNo "Window's Title" "Text to show"
 	fi
 	dialog							\
 		--backtitle "$backTitle"	\
+		--trim						\
 		--aspect 80					\
 		--stdout $hline				\
 		--title "$title"			\
+		--yesno "$text" $lines $cols
+}
+GuiYesNoBack(){ #Use: GuiYesNoBack "Window's Title" "Text to show"
+	local title="$1"
+	local text="$2"
+	local backTitle="$BackTitle"
+	local extraLabel="No"
+	local okLabel="Yes"
+	local cancelLabel="Back"
+	local cols=0
+	local lines=0
+	if [ -n "$whereAmI" ]
+	then 
+		local hline="--colors --hline $whereAmI"
+		cols=80
+		lines=$(($(echo -e "$text" | wc -l)+6))
+	fi
+	dialog								\
+		--backtitle "$backTitle"		\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--aspect 80						\
+		--extra-button					\
+		--extra-label "$extraLabel"		\
+		--stdout $hline					\
+		--title "$title"				\
 		--yesno "$text" $lines $cols
 }
 GuiChecklist(){ #Use: GuiChecklist "Window's Title" "Text to show" "tag1 [item1] status1 tag2 [item2] status2..."
@@ -200,22 +228,27 @@ GuiSummary(){ #Use: GuiMessageBox "Window's Title" "Text to show"
 		[ "$displayCols" -gt 85 ] && cols=85
 		[ "$displayCols" -lt 81 ] && cols=80
 	fi
-	dialog							\
-		--backtitle "$backTitle"	\
-		--extra-button				\
+	dialog							 \
+		--backtitle "$backTitle"	 \
+		--extra-button				 \
 		--extra-label "$extraButton" \
-		--colors					\
-		--aspect 80					\
-		--stdout $hline				\
-		--title "$title"			\
+		--colors					 \
+		--aspect 80					 \
+		--stdout $hline				 \
+		--title "$title"			 \
 		--msgbox "$text" $lines $cols
 }
-GuiMenu(){ #Use: GuiInputBox "Window's Title" "Text to show" "dialog list"
+GuiMenu(){ #Use: GuiMenu "Window's Title" "Text to show" "itemMenu [*Description] ..."
 	local title="$1"
 	local text="$2"
 	shift 2
 	local list="$@"
 	local backTitle="$BackTitle"
+
+	#Check if 'Description' exist in a bash way
+	local toCheck="${list/\**/}"
+	local -a check=($toCheck)
+	[ "${#check[@]}" -lt 2 ] || local additionalParameter="--no-items"
 
 	#Display a status on botton and fix size problem
 	if [ -n "$whereAmI" ]
@@ -230,9 +263,8 @@ GuiMenu(){ #Use: GuiInputBox "Window's Title" "Text to show" "dialog list"
 	dialog							\
 		--backtitle "$backTitle"	\
 		--aspect 80					\
+		--trim $additionalParameter	\
 		--stdout $hline				\
-		--no-tags					\
-		--no-items					\
 		--title "$title" 			\
 		--menu "$text" 0 0 0 		\
 	$list
@@ -340,7 +372,8 @@ GetGroups(){ #Return: users,audio,video,games,...
 	do
 		local groups="$(GuiChecklist "$title" "$text" $groupList)" || return 1
 	done
-	echo ${groups// /,}
+	groups="$(tr '\n' ',' <<<$groups)"
+	echo "${groups%,}"
 }
 #--------/ Getting Functions /--------------------------------------------------
 GetHostname(){ #Return: mycomputer
@@ -399,10 +432,9 @@ GetLocale(){ #Return: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 		s/ /#/g
 		s/$/ off /
 		' "$file")"
-		timezones="$(GuiChecklist "$title" "$text" $timezoneList)" || return 1
-		echo "${timezones//\#/ }"
+		GuiChecklist "$title" "$text" $timezoneList || return 1
 }
-GetLanguage(){ #Use: GetLanguage 
+GetLanguage(){ #Use: GetLanguage locale1 locale2 ... | Return: localeX
 	local title="Language"
 	local text="Set a language for your system.\n(It's based on your locale choice)"
 	local locales="$1"
@@ -415,7 +447,7 @@ GetLanguage(){ #Use: GetLanguage
 	do
 		language="$(GuiRadiolist "$title" "$text" $param)" || return 1
 	done
-	echo $language
+	echo ${language%%\#*}
 }
 GetConsoleFont(){ #Return: lat7a-16
 	local title="Console Fonts"
@@ -479,13 +511,8 @@ GetRepositories(){ #Return: repo1 repo2 repo3 ... [custom->repoCustom]
 	do
 		repositories="$(GuiChecklist "$title" "$text" $repoList)" || return 1
 	done
+	echo "$repositories"
 
-	if GuiYesNo "Custom Repository" 'Do you wanna add a custom repository?'
-	then
-		echo "$repositories 'custom->$(GuiInputBox "$titleCustomRepo" "$textCustomRepo")'"
-	else
-		echo "$repositories"
-	fi
 }
 GetRootPassword(){ #Return: p@ssw0rd
 	#Yes! It's necessary!
@@ -524,16 +551,50 @@ GetUsers(){ #Return: -m -s /bin/bash -G users,wheel,games tiago:passwordcrypted
 		echo "${users[$count]}:${passwords[$count]}"
 	done
 }
+GetMultilib(){ #Return: yes or no
+	local title="Multilib"
+	local text="Do you want to enable a multilib install?"
+	GuiYesNoBack "$title" "$text"
+	case $? in
+		0) echo yes ;;
+		1) return 1	;;
+		*) echo no	;;
+	esac
+}
+GetProfiles(){ #Return: /path/nameOfProfile.cfg
+	local title="Profiles"
+	local text="Select 'Only Base Package' to install only basic 
+		packages (pacman -S base) or a pre-defined profile"
+	local dir="${BaseAnswerFile%/*}/"
+	local profiles="$(find "$dir" 					\
+		-type f 									\
+		-iname "*.cfg" 								\
+		-printf '%P;' 								\
+		-exec grep -Eo -m1 'escription: .*' {}	\;	\
+		| sort )"
+	local profile
+	#Replacing in a bash way
+	profiles="${profiles//.cfg/}"			#remove .cfg from name of files
+	profiles="${profiles//escription:/}"	#remove garbage 'escription:'
+	profiles="${profiles// /_}"				#replace ' ' '_'
+	profiles="${profiles//;_/ *}"			#replace ';_' ' *' if exist
+	profiles="${profiles//;/ *}"			#replace ';' ' *' if exist
+	
+	profile="$(GuiMenu "$title" "$text" $profiles).cfg" \
+		|| return 1
+	echo "${dir}$profile"
+}
 GetSummary(){ #Display all data collected
 	local title="All data collected"
 	local text="Verify that the data is correct before continuing:"
 	local usersAndGroups="$(
 		sed -r '
-			s/^.+-G ([[:alpha:]].+) ([[:alpha:]].+):.*/    User: \2   Groups: \1 \\n/
+			s/^.+-G ([[:alpha:]].+) ([[:alpha:]].+)/    User: \2   Groups: \1 \\n/
 			' <<<"$usersList")"
-	local localesToShow="$( 
-		sed -r '
-			s/ /\\n    /g
+	local locale="$( 
+		sed '
+			:a;N;$!ba
+			s/\n/\\n    /g
 			s/#/ /g
 			'<<<"$locale")"
 	local summary="$(cat <<-_eof_
@@ -541,15 +602,19 @@ GetSummary(){ #Display all data collected
 		\\ZbTimezone:\\ZB $timezone \n
 		\\ZbLanguage:\\ZB $language \n
 		\\ZbKeymap:\\ZB $keymap \n
+		\\ZbMultilib:\\ZB $multilib \n
 		\\ZbLocale:\\ZB \n
-		    $localesToShow \n
+		    $locale \n
 		\\ZbRepositories:\\ZB \n
-		    $(sed 's/ /\\n    /g ; s/#/ /g ;' <<<"$repositories") \n
+		    $(sed '
+				:a;N;$!ba
+				s/\n/\\n    /g ; s/#/ /g' <<<"$repositories") \n
 		\\ZbUsers and Groups:\\ZB \n
 		$usersAndGroups \n
+		\\ZbProfile selected:\\ZB $profile
 	_eof_
 	)"
-	GuiSummary "$title" "$text\n$summary" > /dev/null 2>&1
+	GuiSummary "$title" "$text\n\n$summary" > /dev/null 2>&1
 }
 #--------/ Auxiliary for setting functions/-------------------------------------
 GetEthernetDevice(){ #Return: enp2s0
@@ -720,25 +785,91 @@ SetNetworkConfiguration(){ #Set up the network for installation
 	local text="Configure your network for installation"
 	local ethernetDevice="$(GetEthernetDevice)"
 	local wifiDevice="$(GetWifiDevice)"
+	local siteToPing="www.google.com.br"
 	local choice
 
-	if ping -c1 www.asdasjef.com.br > /dev/null 2>&1 
+	if ping -c1 "$siteToPing" > /dev/null 2>&1 
 	then
 		return 0
 	else
-		GuiYesNo "$title" "Do you want to configure lan?" \
-			|| return 1
+		if GuiYesNo "$title" "There is no network connection.
+			Do you want to configure lan?"
+		then
+			choice="$(GuiMenu "$title" "$text" "Ethernet Wireless")"
+			case $choice in
+				Ethernet) SetEthernet "$ethernetDevice" ;;
+				Wireless) SetWireless "$wifiDevice" ;;
+			esac 
+		else
+			GuiMessageBox "$title" "There is no internet connection, but I'll leave you alone."
+			return 1
+		fi
 	fi
-	choice="$(GuiMenu "$title" "$text" "Ethernet Wireless")"
-	case $choice in
-		Ethernet) SetEthernet "$ethernetDevice" ;;
-		Wireless) SetWireless "$wifiDevice" ;;
-	esac
 }
 #--------/ Answer file /--------------------------------------------------------
 MakeAnswerFile(){
-	local answerFile="/tmp/arquivo.cfg"
+	local title="AnswerFile"
+	local profileFile="$1"
+	local answerFile="/tmp/modified_${profileFile##*/}"
+	local text="Answer file '$answerFile' generated! You can use this file to
+		make automatic mass installs or a new one." 
 	eval 'cat <<-_eof_ >"$answerFile"
-	'"$(cat server_profile.cfg)"'	
+	'"$(cat $profileFile)"'	
 	_eof_'
+	GuiMessageBox "$title" "$text"
+}
+#--------/ Checking Functions /-------------------------------------------------
+ValidatingEnvironment(){
+	local title="Environment Validation"
+	local text="Checking if everything is ok:"
+	local memorySize="$MachineMemSize"
+	local dirTarget="$DirTarget"
+	local dirBoot="$DirBoot"
+	local mountedRootDir="$MountedRootDir"
+	local mountedBootDir="$MountedBootDir"
+	local swap="$SwapActive"
+	local efiFirmware="$EfiFirmware"
+	local errorText
+	#Memory
+	if [ "$memorySize" -lt 524288 ]
+	then
+		text="$text\n* Memory \Z1low\Z0: $memorySize"
+	else
+		text="$text\n* Memory ok: $memorySize"
+	fi
+	#Is partition mounted for root installation?
+	if [ "$mountedRootDir" == "$dirTarget" ]
+	then
+		text="$text\n* Root partition is mounted in '$dirTarget'."
+	else
+		errorText="$errorText\n* Have you mounted your root partition in '$dirTarget' ?"
+	fi
+	#Is partition mounted for /boot?
+	if [ "$mountedBootDir" == "$dirBoot" ]
+	then
+		text="$text\n* Boot partition is mounted in '$dirBoot'."
+	else
+		errorText="$errorText\n* Have you mounted your boot partition in '$dirBoot' ?"
+	fi
+	#Is there a active swap?
+	if [ -n "$swap" ]
+	then
+		text="$text\n* Swap is on in $swap"
+	else
+		errorText="$errorText\n* Have you activated you swap partition?"
+	fi
+	#Bios or EFI?
+	if [ -d "$efiFirmware" ]
+	then
+		text="$text\n* It have a EFI support"
+	else
+		text="$text\n* It have a bios support only"
+	fi
+	if [ -n "$errorText" ]
+	then
+		GuiMessageBox "$title" "$text\n$errorText"
+		return 1
+	else
+		GuiMessageBox "$title" "$text"
+	fi
 }
