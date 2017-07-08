@@ -37,24 +37,55 @@
 #--------/ History /------------------------------------------------------------
 #    Under development
 #
+#--------/For Loggin /----------------------------------------------------------
+LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
+	local logFile="$LogFile"
+	local level="${1^^}" ; shift
+	local message="$@"
+	local date="[$(date '+%Y/%m/%d %H:%M:%S')]"
+
+	case "$level" in
+		  LOG) echo -e "${date}INF: $message" >> "$logFile"
+			   ;;
+		  MSG) echo -e "---Message: $message"
+			   echo "${date}INF: $message" >> "$logFile"
+			   ;;
+		  WAR) echo -e "---Warning: $message.\n    More details in '$logFile'"
+			   echo "${date}${$level}: ${message//\\[nt]/}" >> "$logFile"
+			;;
+		  ERR) echo -e "---$level: $message.\n    More details in '$logFile'\n\nLeaving out..."
+			   cat <<-_eof_ >> "$logFile"
+				${date}${level}: ${message//\\[nt]/}
+				  Occurred when calling function '${FUNCNAME[1]}' line '${BASH_LINENO[1]}'
+				  Functions called in hierarchical order:
+				   '${FUNCNAME[*]}'
+				_eof_
+			;;
+	esac
+}
 #--------/ "Graphical" User Interface Functions /-------------------------------
 GuiInputBox(){ #Use: GuiInputBox "Window's Title" "Text to show"
 	local title="$1"
 	local text="$2"
 	local cols=0
 	local lines=0
+	local okLabel="Next"
+	local cancelLabel="Back"
 	local backTitle="$BackTitle"
 	if [ -n "$whereAmI" ] 
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		cols=80
 		lines=$(($(echo -e "$text" | wc -l)+7))
 	fi
-	dialog							\
-		--backtitle "$backTitle"	\
-		--aspect 80					\
-		--stdout $hline				\
-		--title "$title"			\
+	dialog								\
+		--backtitle "$backTitle"		\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--trim --colors					\
+		--aspect 80						\
+		--stdout $hline					\
+		--title "$title"				\
 		--inputbox "$text" $lines $cols
 }
 GuiMessageBox(){ #Use: GuiMessageBox "Window's Title" "Text to show"
@@ -62,20 +93,24 @@ GuiMessageBox(){ #Use: GuiMessageBox "Window's Title" "Text to show"
 	local text="$2"
 	local cols=0
 	local lines=0
-	local hline
+	local okLabel="Next"
+	local cancelLabel="Back"
 	local backTitle="$BackTitle"
+	local hline
 	if [ -n "$whereAmI" ] 
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		cols=80
 		lines=$(($(echo -e "$text" | wc -l)+5))
 	fi
-	dialog							\
-		--backtitle "$backTitle"	\
-		--trim						\
-		--aspect 80					\
-		--stdout $hline				\
-		--title "$title"			\
+	dialog								\
+		--backtitle "$backTitle"		\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--trim --colors					\
+		--aspect 80						\
+		--stdout $hline					\
+		--title "$title"				\
 		--msgbox "$text" $lines $cols
 }
 GuiYesNo(){ #Use: GuiYesNo "Window's Title" "Text to show"
@@ -84,15 +119,19 @@ GuiYesNo(){ #Use: GuiYesNo "Window's Title" "Text to show"
 	local backTitle="$BackTitle"
 	local cols=0
 	local lines=0
+	local yesLabel="Yes"
+	local noLabel="No"
 	if [ -n "$whereAmI" ]
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		cols=80
 		lines=$(($(echo -e "$text" | wc -l)+6))
 	fi
 	dialog							\
 		--backtitle "$backTitle"	\
-		--trim						\
+		--trim --colors				\
+		--yes-label "$yesLabel"		\
+		--no-label "$noLabel"		\
 		--aspect 80					\
 		--stdout $hline				\
 		--title "$title"			\
@@ -109,7 +148,7 @@ GuiYesNoBack(){ #Use: GuiYesNoBack "Window's Title" "Text to show"
 	local lines=0
 	if [ -n "$whereAmI" ]
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		cols=80
 		lines=$(($(echo -e "$text" | wc -l)+6))
 	fi
@@ -117,6 +156,7 @@ GuiYesNoBack(){ #Use: GuiYesNoBack "Window's Title" "Text to show"
 		--backtitle "$backTitle"		\
 		--ok-label "$okLabel"			\
 		--cancel-label "$cancelLabel"	\
+		--trim --colors					\
 		--aspect 80						\
 		--extra-button					\
 		--extra-label "$extraLabel"		\
@@ -131,6 +171,8 @@ GuiChecklist(){ #Use: GuiChecklist "Window's Title" "Text to show" "tag1 [item1]
 	local list="$@"
 	local backTitle="$BackTitle"
 	local cols=0
+	local okLabel="Next"
+	local cancelLabel="Back"
 
 	#Check if 'item' exist and solve the problem
 	local toCheck="${list%%off*}"
@@ -141,7 +183,7 @@ GuiChecklist(){ #Use: GuiChecklist "Window's Title" "Text to show" "tag1 [item1]
 	#Display a status on botton and fix size problem
 	if [ -n "$whereAmI" ]
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		local displayCols=$(tput cols)
 		cols=$displayCols
 		[ "$displayCols" -gt 85 ] && cols=85
@@ -151,11 +193,19 @@ GuiChecklist(){ #Use: GuiChecklist "Window's Title" "Text to show" "tag1 [item1]
 	dialog										\
 		--backtitle "$backTitle"				\
 		--title "$title" $additionalParameter	\
+		--ok-label "$okLabel"					\
+		--cancel-label "$cancelLabel"			\
+		--trim --colors 						\
 		--aspect 80								\
 		--separate-output						\
 		--stdout $hline							\
 		--checklist "$text" 0 $cols 0			\
 		$list
+	case $? in
+		0) return 0 ;;
+		1) return 1 ;;
+		*) LogMaker "ERR" "Dialog exit with error! The parameter was: $list\n" ;;
+	esac
 }
 GuiRadiolist(){ #Use: GuiRadiolist "Window's Title" "Text to show" "tag [item] status tag [item] status..."
 	local title="$1"
@@ -164,6 +214,8 @@ GuiRadiolist(){ #Use: GuiRadiolist "Window's Title" "Text to show" "tag [item] s
 	local list="$@"
 	local backTitle="$BackTitle"
 	local cols=0
+	local okLabel="Next"
+	local cancelLabel="Back"
 
 	#Check if 'item' exist and solve the problem
 	local toCheck="${list%%off*}"
@@ -174,20 +226,28 @@ GuiRadiolist(){ #Use: GuiRadiolist "Window's Title" "Text to show" "tag [item] s
 	#Display a status on botton and fix size problem
 	if [ -n "$whereAmI" ]
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		local displayCols=$(tput cols)
 		cols=$displayCols
 		[ "$displayCols" -gt 85 ] && cols=85
 		[ "$displayCols" -lt 81 ] && cols=80
 	fi
 
-	dialog											\
-		--backtitle "$backTitle"					\
-		--aspect 80									\
-		--stdout $hline								\
-		--title "$title" $additionalParameter		\
-		--radiolist "$text" 0 $cols 0 				\
+	dialog										\
+		--backtitle "$backTitle"				\
+		--aspect 80								\
+		--ok-label "$okLabel"					\
+		--cancel-label "$cancelLabel"			\
+		--trim --colors 						\
+		--stdout $hline							\
+		--title "$title" $additionalParameter	\
+		--radiolist "$text" 0 $cols 0 			\
 		$list
+	case $? in
+		0) return 0 ;;
+		1) return 1 ;;
+		*) LogMaker "ERR" "Dialog exit with error! The parameter was: $list\n" ;;
+	esac
 }
 GuiPasswordBox(){ #Use: GuiPasswordBox "Window's Title" "Text to show"
 	local title="$1"
@@ -195,18 +255,23 @@ GuiPasswordBox(){ #Use: GuiPasswordBox "Window's Title" "Text to show"
 	local backTitle="$BackTitle"
 	local cols=0
 	local lines=0
+	local okLabel="Next"
+	local cancelLabel="Back"
 	local hline
 	if [ -n "$whereAmI" ]
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		cols=80
 		lines=$(($(echo -e "$text" | wc -l)+7))
 	fi
-	dialog							\
-		--backtitle "$backTitle"	\
-		--stdout $hline				\
-		--aspect 80					\
-		--title "$title"			\
+	dialog								\
+		--backtitle "$backTitle"		\
+		--stdout $hline					\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--trim --colors					\
+		--aspect 80						\
+		--title "$title"				\
 		--passwordbox "$text" $lines $cols
 }
 GuiSummary(){ #Use: GuiMessageBox "Window's Title" "Text to show"
@@ -215,8 +280,9 @@ GuiSummary(){ #Use: GuiMessageBox "Window's Title" "Text to show"
 	local extraButton="Start Again"
 	local cols=0
 	local lines=0
-	local hline
 	local backTitle="$BackTitle"
+	local okLabel="Next"
+	local hline
 	if [ -n "$whereAmI" ] 
 	then 
 		local hline="--hline $whereAmI"
@@ -232,7 +298,8 @@ GuiSummary(){ #Use: GuiMessageBox "Window's Title" "Text to show"
 		--backtitle "$backTitle"	 \
 		--extra-button				 \
 		--extra-label "$extraButton" \
-		--colors					 \
+		--ok-label "$okLabel"		 \
+		--trim --colors				 \
 		--aspect 80					 \
 		--stdout $hline				 \
 		--title "$title"			 \
@@ -244,6 +311,8 @@ GuiMenu(){ #Use: GuiMenu "Window's Title" "Text to show" "itemMenu [*Description
 	shift 2
 	local list="$@"
 	local backTitle="$BackTitle"
+	local okLabel="Next"
+	local cancelLabel="Back"
 
 	#Check if 'Description' exist in a bash way
 	local toCheck="${list/\**/}"
@@ -253,23 +322,79 @@ GuiMenu(){ #Use: GuiMenu "Window's Title" "Text to show" "itemMenu [*Description
 	#Display a status on botton and fix size problem
 	if [ -n "$whereAmI" ]
 	then 
-		local hline="--colors --hline $whereAmI"
+		local hline="--hline $whereAmI"
 		local displayCols=$(tput cols)
 		cols=$displayCols
 		[ "$displayCols" -gt 85 ] && cols=85
 		[ "$displayCols" -lt 81 ] && cols=80
 	fi
 
-	dialog							\
-		--backtitle "$backTitle"	\
-		--aspect 80					\
-		--trim $additionalParameter	\
-		--stdout $hline				\
-		--title "$title" 			\
-		--menu "$text" 0 0 0 		\
+	dialog								\
+		--backtitle "$backTitle"		\
+		--aspect 80						\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--colors						\
+		--trim $additionalParameter		\
+		--stdout $hline					\
+		--title "$title" 				\
+		--menu "$text" 0 0 0 			\
 	$list
+	case $? in
+		0) return 0 ;;
+		1) return 1 ;;
+		*) LogMaker "ERR" "Dialog exit with error! The parameter was: $list\n" ;;
+	esac
 }
-GuiIntro(){
+GuiCalendar(){ #Use: GuiCalendar "Window's Title" "Text to show" | Return: '%m%d_%Y'
+	local title="$1"
+	local text="$2"
+	local backTitle="$BackTitle"
+	local cols=0
+	local okLabel="Next"
+	local cancelLabel="Back"
+	local hline
+	if [ -n "$whereAmI" ]
+	then 
+		local hline="--hline $whereAmI"
+		cols=80
+	fi
+	dialog								\
+		--backtitle "$backTitle"		\
+		--stdout $hline					\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--trim --colors					\
+		--aspect 80						\
+		--title "$title"				\
+		--date-format '%m%d_%Y'			\
+		--calendar "$text" 0 $cols
+}
+GuiTimeBox(){ #Use: GuiTimeBox "Window's Title" "Text to show" | Return: '%H%M'
+	local title="$1"
+	local text="$2"
+	local backTitle="$BackTitle"
+	local cols=0
+	local okLabel="Next"
+	local cancelLabel="Back"
+	local hline
+	if [ -n "$whereAmI" ]
+	then 
+		local hline="--hline $whereAmI"
+		cols=80
+	fi
+	dialog								\
+		--backtitle "$backTitle"		\
+		--stdout $hline					\
+		--ok-label "$okLabel"			\
+		--cancel-label "$cancelLabel"	\
+		--trim --colors 				\
+		--aspect 80						\
+		--title "$title"				\
+		--time-format '%H%M'			\
+		--timebox "$text" 0 $cols
+}
+GuiIntro(){ #Do not use. In development...
 	local text="Bem vindo"
 	local col=10
 	local lines=$(tput lines)
@@ -293,7 +418,7 @@ GetUserName(){ #Return: someonename
 	while [ "$check" != "ok" ]
 	do
 		errorMessage=""
-		userName=$(GuiInputBox "$title" "$text") || return 1
+		userName=$(GuiInputBox "$title" "$text") || return
 		[ "${#userName}" -gt 32 ] 														\
 			&& errorMessage="* It can't be more than 32 chars"	
 		[ -z "${userName}" ]	 														\
@@ -326,7 +451,7 @@ GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 	do
 		strongMessage="Password Strength: Very Strong"
 		password1="" password2="" warnMessage=""
-		password1="$(GuiPasswordBox "$title" "$text")" || return 1
+		password1="$(GuiPasswordBox "$title" "$text")" || return
 		if [ -z "$password1" ]
 		then
 			GuiMessageBox "Error!" "Password can't be empty!\nPlease try again."
@@ -353,7 +478,7 @@ GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 			GuiYesNo "$warnTitle" "$strongMessage\n\n${warnMessage}\n${warnText}" \
 				|| continue
 		fi
-		password2="$(GuiPasswordBox "$title" "$strongMessage\n\n$textAgain")" || return 1
+		password2="$(GuiPasswordBox "$title" "$strongMessage\n\n$textAgain")" || return
 		if [ "$password1" != "$password2" ]
 		then
 			GuiMessageBox "Error!" "Passwords does not match!\nPlease try again."
@@ -362,6 +487,7 @@ GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 		check="ok"
 	done
 	openssl passwd -1 -stdin <<<"$password1"
+	LogMaker "LOG" "Collected: password."
 }
 GetGroups(){ #Return: users,audio,video,games,...
 	local title="Groups"
@@ -370,12 +496,26 @@ GetGroups(){ #Return: users,audio,video,games,...
 	local groups
 	while [ -z "$groups" ]
 	do
-		local groups="$(GuiChecklist "$title" "$text" $groupList)" || return 1
+		local groups="$(GuiChecklist "$title" "$text" $groupList)" || return
 	done
 	groups="$(tr '\n' ',' <<<$groups)"
 	echo "${groups%,}"
+	LogMaker "LOG" "Collected: groups '$groups'."
+}
+IsEfi(){ #Returns 0 if it is a EFI system and 1 if its not.
+	[ -d "$efiFirmware" ]
 }
 #--------/ Getting Functions /--------------------------------------------------
+GetGrubArguments(){
+	if IsEfi
+	then
+		echo "--target=x86_64-efi --efi-target=${DirBoot##$DirTarget}"
+		LogMaker "LOG" "EFI detected."
+	else
+		echo "--target=i386-pc --boot-directory=${DirBoot##$DirTarget}"
+		LogMaker "LOG" "Bios only detected."
+	fi
+}
 GetHostname(){ #Return: mycomputer
 	# Validate and return the hostname typed
 	# Validation made based on man 8 useradd
@@ -385,7 +525,7 @@ GetHostname(){ #Return: mycomputer
 	while [ "$check" != "ok" ]
 	do
 		errorMessage=""
-		hostname=$(GuiInputBox "$title" "$text") || return 1
+		hostname=$(GuiInputBox "$title" "$text") || return
 		[ "${#hostname}" -gt 64 ] 														\
 			&& errorMessage="* It can't be more than 64 chars"	
 		[ -z "${hostname}" ]	 														\
@@ -405,6 +545,7 @@ GetHostname(){ #Return: mycomputer
 		fi
 	done
 	echo "$hostname"
+	LogMaker "LOG" "Collected: hostname."
 }
 GetTimezone(){ #Return: America/Sao_Paulo
 	local title="Timezone"
@@ -414,9 +555,10 @@ GetTimezone(){ #Return: America/Sao_Paulo
 	local timezone
 	while [ -z "$timezone" ]
 	do
-		timezone="$(GuiRadiolist "$title" "$text" $timezoneList)" || return 1
+		timezone="$(GuiRadiolist "$title" "$text" $timezoneList)" || return
 	done
 	echo $timezone
+	LogMaker "LOG" "Collected: timezone."
 }
 GetLocale(){ #Return: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 	# It's change ' ' to '#' in locales names. It's easier to keep in bash
@@ -424,7 +566,6 @@ GetLocale(){ #Return: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 	local title="Locales"
 	local text="Choose more than one locale if you need it"
 	local file="/etc/locale.gen"
-	local timezones
 	local timezoneList="$(sed -r '
 		/^#?[a-z]/!d 
 		s/^#//
@@ -432,7 +573,8 @@ GetLocale(){ #Return: 'aa_ER@saaho#UTF-8' 'ak_GH#UTF-8' 'an_ES#ISO-8859-15'
 		s/ /#/g
 		s/$/ off /
 		' "$file")"
-		GuiChecklist "$title" "$text" $timezoneList || return 1
+	GuiChecklist "$title" "$text" $timezoneList || return
+	LogMaker "LOG" "Collected: locale."
 }
 GetLanguage(){ #Use: GetLanguage locale1 locale2 ... | Return: localeX
 	local title="Language"
@@ -445,9 +587,10 @@ GetLanguage(){ #Use: GetLanguage locale1 locale2 ... | Return: localeX
 	done
 	while [ -z "$language" ]
 	do
-		language="$(GuiRadiolist "$title" "$text" $param)" || return 1
+		language="$(GuiRadiolist "$title" "$text" $param)" || return
 	done
 	echo ${language%%\#*}
+	LogMaker "LOG" "Collected: language."
 }
 GetConsoleFont(){ #Return: lat7a-16
 	local title="Console Fonts"
@@ -459,7 +602,8 @@ GetConsoleFont(){ #Return: lat7a-16
 		-iname "*.gz" 				\
 		-printf '%P off \n' \
 		| sort | sed -r 's/(.psfu?|.cp)?.gz//')"
-	GuiRadiolist "$title" "$text" $fontList
+	GuiRadiolist "$title" "$text" $fontList || return
+	LogMaker "LOG" "Collected: console font."
 }
 GetConsoleFontMap(){ #Return: cp737
 	local title="Console Font Map"
@@ -471,7 +615,8 @@ GetConsoleFontMap(){ #Return: cp737
 		-iname "*.uni" 				\
 		-printf '%P off \n' \
 		| sort)"
-	GuiRadiolist "$title" "$text" ${fontList//\.uni/''}
+	GuiRadiolist "$title" "$text" ${fontList//\.uni/''} || return
+	LogMaker "LOG" "Collected: font map for console font."
 }
 GetKeymap(){ #Return: br-abnt2
 	local title="Keyboard layout"
@@ -485,9 +630,13 @@ GetKeymap(){ #Return: br-abnt2
 		| sort )"
 	while [ -z "$keymap" ]
 	do
-		keymap="$(GuiRadiolist "$title" "$text" ${keymapList//.map.gz/})" || return 1
+		keymap="$(GuiRadiolist "$title" "$text" ${keymapList//.map.gz/})" || return
 	done
-	echo ${keymap##*/}
+	keymap="${keymap##*/}"
+	loadkeys $keymap
+	LogMaker "LOG" "Defined keyboard layout '$keymap' on system."
+	echo $keymap
+	LogMaker "LOG" "Collected: keyboard layout."
 }
 GetRepositories(){ #Return: repo1 repo2 repo3 ... [custom->repoCustom]
 	local title="Repositories"
@@ -496,21 +645,38 @@ GetRepositories(){ #Return: repo1 repo2 repo3 ... [custom->repoCustom]
 	local textCustomRepo="Type your custom repository here:"
 	local file="/etc/pacman.d/mirrorlist"
 	local repositories
-	local repoList="$(sed -rn '
-		/Server|Score/!d
-		h
-		n
-		G
-		s/\n/ /
-		s/#?Server = http:\/\///
-		s/ /_/5g
-		s/$/ off / 
-		s/\/\$repo.+,//p 
-		' $file | sort -k2)"		#Sort by country
+	if grep -q 'Score' $file
+	then
+		local repoList="$(sed -rn '
+			/Server|Score/!d
+			/##/ s/^.+, //
+			/^[[:alpha:]]/ s/ /_/g
+			{h;n;G}
+			s/^#?Server = //
+			s/$/ off/
+			s/\n/ /p
+			' $file \
+			| sort -k2 \
+			| tr '\n' ' ')"
+	else
+		local repoList="$(sed -rn '
+			/^$/,$!d
+			/^$/d
+			/##/ s/ /_/2g
+			s/## //
+			{h;n;G}
+			s/^#?Server = / /
+			s/$/ off/
+			s/\n/ /p
+			' $file \
+			| sort -k2 \
+			| tr '\n' ' ')"
+	fi
 	while [ -z "$repositories" ]
 	do
-		repositories="$(GuiChecklist "$title" "$text" $repoList)" || return 1
+		repositories="$(GuiChecklist "$title" "$text" $repoList)" || return
 	done
+	LogMaker "LOG" "Collected: repositories."
 	echo "$repositories"
 
 }
@@ -518,6 +684,7 @@ GetRootPassword(){ #Return: p@ssw0rd
 	#Yes! It's necessary!
 	#I'm trying to respect rules here!
 	echo "root:$(GetPassword "Type a password for root user")"
+	LogMaker "LOG" "Collected: root password."
 }
 GetUsers(){ #Return: -m -s /bin/bash -G users,wheel,games tiago:passwordcrypted
 	local titleUser="Users"
@@ -527,11 +694,11 @@ GetUsers(){ #Return: -m -s /bin/bash -G users,wheel,games tiago:passwordcrypted
 	local textQuestionAgain="Do you want to add another ordinary user?"
 	local count=0
 	local user groups 
-	local -a users passwords
+	local -a users passwords groupList
 
 	while :
 	do
-		user="" groups=""
+		user="" groups="" 
 		if [ "$count" -eq 0 ]
 		then 
 			GuiYesNo "$titleQuestion" "$textQuestion" \
@@ -540,15 +707,18 @@ GetUsers(){ #Return: -m -s /bin/bash -G users,wheel,games tiago:passwordcrypted
 			GuiYesNo "$titleQuestion" "$textQuestionAgain" \
 				|| break
 		fi
-		user="$(GetUserName)"
-		groups="$(GetGroups)"
-		passwords[$count]="$(GetPassword "Type a password for '$user'")"
+		user="$(GetUserName)" || return
+		groups="$(GetGroups)" || return
+		groupList[$count]="$groups"
+		passwords[$count]="$(GetPassword "Type a password for '$user'")" \
+			|| return
 		users[$count]="-m -s /bin/bash -G $groups $user"
 		let ++count
 	done
 	for ((count=0;count<${#users[@]};count++))
 	do
 		echo "${users[$count]}:${passwords[$count]}"
+		LogMaker "LOG" "Collected: User '${users[$count]##* }', groups '${groupList[$count]}' and password for it."
 	done
 }
 GetMultilib(){ #Return: yes or no
@@ -558,8 +728,9 @@ GetMultilib(){ #Return: yes or no
 	case $? in
 		0) echo yes ;;
 		1) return 1	;;
-		*) echo no	;;
+		3) echo no	;;
 	esac
+	LogMaker "LOG" "Collected: multilib option."
 }
 GetProfiles(){ #Return: /path/nameOfProfile.cfg
 	local title="Profiles"
@@ -581,8 +752,9 @@ GetProfiles(){ #Return: /path/nameOfProfile.cfg
 	profiles="${profiles//;/ *}"			#replace ';' ' *' if exist
 	
 	profile="$(GuiMenu "$title" "$text" $profiles).cfg" \
-		|| return 1
+		|| return
 	echo "${dir}$profile"
+	LogMaker "LOG" "Collected: profile option."
 }
 GetSummary(){ #Display all data collected
 	local title="All data collected"
@@ -614,18 +786,18 @@ GetSummary(){ #Display all data collected
 		\\ZbProfile selected:\\ZB $profile
 	_eof_
 	)"
-	GuiSummary "$title" "$text\n\n$summary" > /dev/null 2>&1
+	GuiSummary "$title" "$text\n\n$summary" > /dev/null 2>&1 || return
+	LogMaker "LOG" "The summary was displayed."
 }
 #--------/ Auxiliary for setting functions/-------------------------------------
-GetEthernetDevice(){ #Return: enp2s0
+GetEthernetDevice(){ #Return: enp2s0 or eth0 or any network device
 	local title="Ethernet card"
 	local text="Configuration of ethernet card"
 	# TODO: Make a better sed code here
-	local wifiDevFilter="$(sed -r '
-			/^[[:alnum:]]+:/!d
-			s/(^[[:alnum:]]+):.*/\1/
-			' /proc/net/wireless \
-			| tr '\n' '|')"
+	local wifiDevFilter="$(sed '
+		s/.*net\///
+		s/\/.*$/\|/
+		' <<<"$(ls -d /sys/class/net/*/wireless 2> /dev/null)")"
 	local ethernetList="$(sed -r '
 			/^[[:alnum:]]+:/!d
 			s/(^[[:alnum:]]+):.*/\1/
@@ -635,25 +807,27 @@ GetEthernetDevice(){ #Return: enp2s0
 	then 
 		echo "${ethernetList/ off/}"
 	else
-		GuiMenu "$title" "$text" $ethernetList
+		GuiMenu "$title" "$text" $ethernetList || return
 	fi
 }
-GetWifiDevice(){ #Return: wlp2s0
-	local title="Ethernet card"
-	local text="Configuration of ethernet card"
-	# TODO: Make a better sed code here
-	local wifiDevList="$(sed -r '
-			/^[[:alnum:]]+:/!d
-			s/(^[[:alnum:]]+):.*/\1/
-			' /proc/net/wireless)"
-	if [ "$(wc -l <<<"$wifiDevList")" -lt 2 ] 
+GetWifiDevice(){ #Return: wlp2s0 or eth1 or any wireless device
+	local title="Wireless card"
+	local text="Configuration of wireless card"
+	local wifiDevList="$(ls -d /sys/class/net/*/wireless 2> /dev/null)"
+	local gb1 gb2 gb3 wifi gb4
+	if [ "$(wc -l <<<"$wifiDevList")" -gt 2 ] 
 	then 
-		echo "${wifiDevList/ off/}"
+		while IFS=/ read gb1 gb2 gb3 wifi gb4
+		do
+			$wifiDevList="$wifiDevList $wifi off"
+		done <<<"$wifiDevList"
+		GuiMenu "$title" "$text" $wifiDevList || return
 	else
-		GuiMenu "$title" "$text" $wifiDevList
+		wifiDevList="${wifiDevList#*net/}"
+		echo "${wifiDevList%/*}"
 	fi
 }
-SetDHCP(){ #Use: SetDHCP <enp2s0|wlp2s0>
+SetDHCP(){ #Use: SetDHCP <enpXsX|wlpXsX|or any name for this device>
 	local device="$1"
 	local titleError="Error"
 	local textError1="dhcpcd or dhclient not found! Try Fixed IP..."
@@ -665,7 +839,7 @@ SetDHCP(){ #Use: SetDHCP <enp2s0|wlp2s0>
 		|| local dhcpReleaseCommand="$(type -p dhclient) -r"
 	if [ -z "${dhcpReleaseCommand%-*}" ]
 	then
-		GuiMessage "$titleError" "$textError"
+		GuiMessage "$titleError" "$textError" || return
 		return 1
 	else
 		eval $dhcpReleaseCommand $device
@@ -676,11 +850,13 @@ SetDHCP(){ #Use: SetDHCP <enp2s0|wlp2s0>
 	then
 		ip="$(ip addr show $device \
 			| grep -Eo -m1 '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}/(8|16|24)')"
-		GuiMessageBox "$titleSuccess" "$textSuccess\nIP: $ip\n"
+		GuiMessageBox "$titleSuccess" "$textSuccess\nIP: $ip\n" || return
 	else
-		GuiMessageBox "$titleError" "$textError2"
+		GuiMessageBox "$titleError" "$textError2" || return
+		LogMaker "WAR" "Network: Impossíble to get IP from dhcp server!" > /dev/null
 		return 1
 	fi
+	LogMaker "LOG" "Network: Set '$ip' on '$device'."
 }
 SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
 	local device="$1"
@@ -697,7 +873,7 @@ SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
 				then
 					step=Gateway
 				else
-					GuiMessageBox "Error" "It's a not valid IP address. Try again"
+					GuiMessageBox "Error" "It's a not valid IP address. Try again" || return
 				fi
 				;;
 	   Gateway)
@@ -708,7 +884,7 @@ SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
 				then
 					step=DNS
 				else
-					GuiMessageBox "Error" "It's a not valid IP address. Try again"
+					GuiMessageBox "Error" "It's a not valid IP address. Try again" || return
 				fi
 				;;
 		   DNS)
@@ -719,7 +895,7 @@ SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
 				then
 					break
 				else
-					GuiMessageBox "Error" "It's a not valid IP address. Try again"
+					GuiMessageBox "Error" "It's a not valid IP address. Try again" || return
 				fi
 				;;
 		esac
@@ -741,7 +917,7 @@ SetEthernet() { #Use: SetEthernet ethernetDeviceName
 	local device="$1"
 	local title="Ethernet"
 	local text="Select a way to set up '$device'"
-	local choice="$(GuiMenu "$title" "$text" 'DHCP Fixed_Address')"
+	local choice="$(GuiMenu "$title" "$text" 'DHCP Fixed_Address')" || return
 	case $choice in
 				 DHCP) SetDHCP "$device"	;;
 		Fixed_Address) SetFixedIP "$device"	;;
@@ -764,12 +940,13 @@ SetWireless() { #Use: SetWireless wirelessDeviceName
 			do
 				wifiList="$wifiList $wifi ${quality#-} off"
 			done < <(wpa_cli scan_results | grep -E '^[[:alnum:]][[:alnum:]]:')
-			wifiSelected="$(GuiRadiolist "$title" "Select a wireless lan" "$wifiList")" \
-				&& break
 		done
+		wifiSelected="$(GuiRadiolist "$title" "Select a wireless lan" "$wifiList")" \
+			|| return 1
 	else
 		local textError="wpa_supplicant gave a error when it's tried to start."
-		GuiMessageBox "Error" "$textError"
+		GuiMessageBox "Error" "$textError" \
+			|| return 1
 	fi
 	wifiPassword="$(GuiPasswordBox "$title" "Input a password for '$wifiSelected'")"
 	networkID="$(wpa_cli -i "$device" add_network)"
@@ -780,18 +957,22 @@ SetWireless() { #Use: SetWireless wirelessDeviceName
 	SetDHCP "$device"
 }
 #--------/ Setting Functions /--------------------------------------------------
-SetNetworkConfiguration(){ #Set up the network for installation
+SetNetworkConfiguration(){ #Set up the network for installation | Use: --text-mode in automatic install
 	local title="Network"
 	local text="Configure your network for installation"
 	local ethernetDevice="$(GetEthernetDevice)"
 	local wifiDevice="$(GetWifiDevice)"
 	local siteToPing="www.google.com.br"
+	local textMode="$1"
 	local choice
 
 	if ping -c1 "$siteToPing" > /dev/null 2>&1 
 	then
 		return 0
 	else
+		LogMaker "LOG" "Network: There is no internet conection. Trying to configure network..."
+		[ -n "$textMode" ] && return 0
+
 		if GuiYesNo "$title" "There is no network connection.
 			Do you want to configure lan?"
 		then
@@ -806,6 +987,28 @@ SetNetworkConfiguration(){ #Set up the network for installation
 		fi
 	fi
 }
+SetDateAndTime(){ #Set up date and time automatic(internet) or manual
+	local title="Date and Time"
+	local text="Your system's date and time could not be set automatically.\n
+		Manually set it"
+	local siteToPing="www.google.com.br"
+	local textMode="$1"
+	local date time
+
+	if ping -c1 "$siteToPing" > /dev/null 2>&1 
+	then
+		timedatectl set-ntp true
+	else
+		LogMaker "LOG" "DateAndTime: It's not possible to automatic update your system clock!"
+		[ -n "$textMode" ] && return 0
+
+		date="$(GuiCalendar "$title" "$text")" || return
+		time="$(GuiTimeBox "$title" "$text")"  || return
+		date "${date%_*}${time}${date#*_}"	   || return
+		hwclock -w							   || return
+		LogMaker "LOG" "DateAndTime: date and time manualy defined!"
+	fi
+}
 #--------/ Answer file /--------------------------------------------------------
 MakeAnswerFile(){
 	local title="AnswerFile"
@@ -816,7 +1019,8 @@ MakeAnswerFile(){
 	eval 'cat <<-_eof_ >"$answerFile"
 	'"$(cat $profileFile)"'	
 	_eof_'
-	GuiMessageBox "$title" "$text"
+	GuiMessageBox "$title" "$text" || return
+	LogMaker "LOG" "AnswerFile: Answer file generated in '$answerFile'"
 }
 #--------/ Checking Functions /-------------------------------------------------
 ValidatingEnvironment(){
@@ -828,7 +1032,9 @@ ValidatingEnvironment(){
 	local mountedRootDir="$MountedRootDir"
 	local mountedBootDir="$MountedBootDir"
 	local swap="$SwapActive"
+	local textMode="$1"
 	local efiFirmware="$EfiFirmware"
+
 	local errorText
 	#Memory
 	if [ "$memorySize" -lt 524288 ]
@@ -841,6 +1047,14 @@ ValidatingEnvironment(){
 	if [ "$mountedRootDir" == "$dirTarget" ]
 	then
 		text="$text\n* Root partition is mounted in '$dirTarget'."
+		#Root partition size
+		if [ "${PartitionRootSize%M}" -lt 800 ]
+		then
+			errorText="$errorText\n* Partition root with insufficient size: 
+				${PartitionRootSize##* }.\nMinimal is 800MB"
+		else
+			text="$text\n* Partition root size ok: ${PartitionRootSize##* }"
+		fi
 	else
 		errorText="$errorText\n* Have you mounted your root partition in '$dirTarget' ?"
 	fi
@@ -848,6 +1062,14 @@ ValidatingEnvironment(){
 	if [ "$mountedBootDir" == "$dirBoot" ]
 	then
 		text="$text\n* Boot partition is mounted in '$dirBoot'."
+		#Boot partition size
+		if [ "${PartitionBootSize%M}" -lt 100 ]
+		then
+			errorText="$errorText\n* Partition boot with insufficient size:
+			${PartitionBootSize##* }.\n Minimal is 100MB"
+		else
+			text="$text\n* Partition boot size ok: ${PartitionBootSize##* }"
+		fi
 	else
 		errorText="$errorText\n* Have you mounted your boot partition in '$dirBoot' ?"
 	fi
@@ -856,20 +1078,36 @@ ValidatingEnvironment(){
 	then
 		text="$text\n* Swap is on in $swap"
 	else
-		errorText="$errorText\n* Have you activated you swap partition?"
+		text="$text\n* \Z1Have you activated you swap partition?\Z0"
 	fi
 	#Bios or EFI?
-	if [ -d "$efiFirmware" ]
+	if IsEfi
 	then
-		text="$text\n* It have a EFI support"
+		text="$text\n* It has a EFI support"
 	else
-		text="$text\n* It have a bios support only"
+		text="$text\n* It has a bios support only"
 	fi
 	if [ -n "$errorText" ]
 	then
-		GuiMessageBox "$title" "$text\n$errorText"
-		return 1
+		if [ -n "$textMode" ]
+		then
+			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText"
+		else
+			GuiMessageBox "$title" "$text\n$errorText"
+			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText" > /dev/null
+		fi
 	else
-		GuiMessageBox "$title" "$text"
+		if [ -n "$textMode" ]
+		then
+			text="$(sed -r '
+				s/\\Z1/\\033[31m/
+				s/\\Z0/\\033[0m/
+				' <<<"$text")"
+			LogMaker "MSG" "SystemCheck: $text"
+		else
+			GuiMessageBox "$title" "$text"
+			LogMaker "LOG" "SystemCheck: $text"
+		fi
 	fi
 }
+
