@@ -34,10 +34,22 @@
 #  set showmode
 #
 #    or you can use Kate software: https://kate-editor.org/
+#
+#--------/ Thanks /-------------------------------------------------------------
+# Brazilian shell script yahoo list: shell-script@yahoogrupos.com.br
+#   Especially: Julio (below), Itamar (funcoeszz co-author: http://funcoeszz.net)
+#	and other 4K users who make this list rocks!
+# The brazilian shell script (pope|master) Julio Cezar Neves who made the best
+#   portuguese book of shell script (Programação Shell Linux 11ª edição);
+#	His page: http://wiki.softwarelivre.org/TWikiBar/WebHome
+# Hartmut Buhrmester: Ho rewrite wsusoffline script for Linux. I I was inspired 
+#   by the way you did your log, and copy some code too.
+# Cidinha (my wife): For her patience and love.
+# 
 #--------/ History /------------------------------------------------------------
 #    Under development
 #
-#--------/For Loggin /----------------------------------------------------------
+#--------/ Auxiliary functions/----------------------------------------------------------
 LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
 	local logFile="$LogFile"
 	local level="${1^^}" ; shift
@@ -57,11 +69,143 @@ LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
 			   cat <<-_eof_ >> "$logFile"
 				${date}${level}: ${message//\\[nt]/}
 				  Occurred when calling function '${FUNCNAME[1]}' line '${BASH_LINENO[1]}'
-				  Functions called in hierarchical order:
-				   '${FUNCNAME[*]}'
+				  Backtrace:'${FUNCNAME[*]}'
 				_eof_
+				local output depth=0
+				while output="$(caller $depth)"
+				do
+					printf '%s\n' "Caller $depth: $output" >>$logFile
+					depth="$(( depth + 1 ))"
+				done
+				exit 255
 			;;
 	esac
+}
+WaitingNineSeconds(){
+	local textMode="$1"
+	local text="Press \033[31mCTRL+C\033[0m to cancel this installation"
+	local lines=$(tput lines)
+	local seconds
+	echo -e "$text"
+	for ((seconds=8;seconds>=0;seconds--))
+	do
+		if [ $seconds -gt 5 ] 
+		then 
+			printf "\033[32m$seconds...\033[0m"
+			sleep 1
+			continue
+		fi
+
+		[ $seconds -ge 3 ] && ( printf "\033[33m$seconds...\033[0m" ; sleep 1 )
+		[ $seconds -lt 3 ] && ( printf "\033[31m$seconds...\033[0m" ; sleep 1 )
+	done
+}
+ValidatingEnvironment(){
+	local title="Environment Validation"
+	local text="Checking if everything is ok:\n"
+	local memorySize="$MachineMemSize"
+	local dirTarget="$DirTarget"
+	local dirBoot="$DirBoot"
+	local mountedRootDir="$MountedRootDir"
+	local mountedBootDir="$MountedBootDir"
+	local swap="$SwapActive"
+	local textMode="$1"
+	local efiFirmware="$EfiFirmware"
+	local alertNeeded rtn
+
+	local errorText
+	#Memory
+	if [ "$memorySize" -lt 524288 ]
+	then
+		text="$text* Memory \Z1low\Z0: $memorySize\n"
+		alertNeeded=1
+	else
+		text="$text* Memory ok: $memorySize\n"
+	fi
+	#Is partition mounted for root installation?
+	if [ "$mountedRootDir" == "$dirTarget" ]
+	then
+		text="$text* Root partition is mounted in '$dirTarget'.\n"
+		#Root partition size
+		if [ "${PartitionRootSize%M}" -lt 800 ]
+		then
+			errorText="$errorText* Partition root with insufficient size: 
+				${PartitionRootSize##* }.\Z1Minimal is 800MB\Z0\n"
+		else
+			text="$text* Partition root size ok: ${PartitionRootSize##* }\n"
+		fi
+	else
+		errorText="$errorText* Have you mounted your root partition in '$dirTarget' ?\n"
+	fi
+	#Is partition mounted for /boot?
+	if [ "$mountedBootDir" == "$dirBoot" ]
+	then
+		text="$text* Boot partition is mounted in '$dirBoot'.\n"
+		#Boot partition size
+		if [ "${PartitionBootSize%M}" -lt 100 ]
+		then
+			errorText="$errorText* Partition boot with insufficient size:
+			${PartitionBootSize##* }.\Z1Minimal is 100MB\Z0\n"
+		else
+			text="$text* Partition boot size ok: ${PartitionBootSize##* }\n"
+		fi
+	else
+		errorText="$errorText* Have you mounted your boot partition in '$dirBoot' ?\n"
+	fi
+	#Is there a active swap?
+	if [ -n "$swap" ]
+	then
+		text="$text* Swap is on in $swap\n"
+	else
+		text="$text* \Z1Have you activated your swap partition?\Z0\n"
+		alertNeeded=1
+	fi
+	#Bios or EFI?
+	if IsEfi
+	then
+		text="$text* It has a EFI support\n"
+	else
+		text="$text* It has a bios support only\n"
+	fi
+	if [ -n "$errorText" ]
+	then
+		if [ -n "$textMode" ]
+		then
+			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText"
+		else
+			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText" > /dev/null
+			GuiMessageBox "$title" "$text\nSome requirements have not been met:\n${errorText}
+				\Z1Impossible to continue\Z0!" || return 
+			return 1
+		fi
+	else
+		if [ -n "$textMode" ]
+		then
+			text="$(sed -r '
+				s/\\Z1/\\033[31m/
+				s/\\Z0/\\033[0m/
+				' <<<"$text")"
+			LogMaker "MSG" "SystemCheck: $text"
+			WaitingNineSeconds
+		else
+			LogMaker "LOG" "SystemCheck: $text"
+			GuiMessageBox "$title" "$text"
+			return 
+		fi
+	fi
+}
+MakeAnswerFile(){
+	local title="AnswerFile"
+	local profileFile="$1"
+	local answerFile="/tmp/modified_${profileFile##*/}"
+	local text="Answer file '$answerFile' generated! You can use this file to
+		make automatic mass installs or a new one." 
+	eval 'cat <<-_eof_ >"$answerFile"
+	'"$(cat $profileFile)"'	
+	_eof_'
+	GuiMessageBox "$title" "$text" || return
+	LogMaker "LOG" "AnswerFile: Answer file generated in '$answerFile'"
+	echo "$answerFile"
 }
 #--------/ "Graphical" User Interface Functions /-------------------------------
 GuiInputBox(){ #Use: GuiInputBox "Window's Title" "Text to show"
@@ -449,7 +593,7 @@ GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 	local check password1 password2 warnMessage strong strongMessage
 	while [ "$check" != "ok" ]
 	do
-		strongMessage="Password Strength: Very Strong"
+		strongMessage="Password Strength: \ZbVery Strong\ZB"
 		password1="" password2="" warnMessage=""
 		password1="$(GuiPasswordBox "$title" "$text")" || return
 		if [ -z "$password1" ]
@@ -471,9 +615,9 @@ GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 		then
 			strong=$(echo -e $warnMessage | wc -l)
 			case $strong in
-				1) strongMessage="Password Strength: Strong"			;;
-				2) strongMessage="Password Strength: Medium"			;;
-				*) strongMessage="Password Strength: A piece of crap!"	;;
+				1) strongMessage="Password Strength: \ZbStrong\ZB"			 ;;
+				2) strongMessage="Password Strength: \ZbMedium\ZB"			 ;;
+				*) strongMessage="Password Strength: \ZbA piece of crap!\ZB" ;;
 			esac
 			GuiYesNo "$warnTitle" "$strongMessage\n\n${warnMessage}\n${warnText}" \
 				|| continue
@@ -487,7 +631,6 @@ GetPassword(){ #Use: GetPasword "Text" | Return: p@ssw0rd
 		check="ok"
 	done
 	openssl passwd -1 -stdin <<<"$password1"
-	LogMaker "LOG" "Collected: password."
 }
 GetGroups(){ #Return: users,audio,video,games,...
 	local title="Groups"
@@ -500,7 +643,6 @@ GetGroups(){ #Return: users,audio,video,games,...
 	done
 	groups="$(tr '\n' ',' <<<$groups)"
 	echo "${groups%,}"
-	LogMaker "LOG" "Collected: groups '$groups'."
 }
 IsEfi(){ #Returns 0 if it is a EFI system and 1 if its not.
 	[ -d "$efiFirmware" ]
@@ -773,8 +915,8 @@ GetSummary(){ #Display all data collected
 		\\ZbHostname:\\ZB $hostname \n
 		\\ZbTimezone:\\ZB $timezone \n
 		\\ZbLanguage:\\ZB $language \n
-		\\ZbKeymap:\\ZB $keymap \n
 		\\ZbMultilib:\\ZB $multilib \n
+		\\ZbKeymap:\\ZB $keymap \n
 		\\ZbLocale:\\ZB \n
 		    $locale \n
 		\\ZbRepositories:\\ZB \n
@@ -970,8 +1112,14 @@ SetNetworkConfiguration(){ #Set up the network for installation | Use: --text-mo
 	then
 		return 0
 	else
+		if [ -n "$textMode" ] 
+		then 
+			LogMaker "MSG" "Network: There is no internet conection. Trying to install without it..."
+			WaitingNineSeconds
+			return 0
+		else
 		LogMaker "LOG" "Network: There is no internet conection. Trying to configure network..."
-		[ -n "$textMode" ] && return 0
+		fi
 
 		if GuiYesNo "$title" "There is no network connection.
 			Do you want to configure lan?"
@@ -999,9 +1147,14 @@ SetDateAndTime(){ #Set up date and time automatic(internet) or manual
 	then
 		timedatectl set-ntp true
 	else
-		LogMaker "LOG" "DateAndTime: It's not possible to automatic update your system clock!"
-		[ -n "$textMode" ] && return 0
-
+		if [ -n "$textMode" ] 
+		then 
+			LogMaker "MSG" "DateAndTime: Impossible to automatic update the system clock!"
+			WaitingNineSeconds
+			return 0
+		else
+			LogMaker "LOG" "DateAndTime: Impossible to automatic update the system clock!"
+		fi
 		date="$(GuiCalendar "$title" "$text")" || return
 		time="$(GuiTimeBox "$title" "$text")"  || return
 		date "${date%_*}${time}${date#*_}"	   || return
@@ -1009,105 +1162,3 @@ SetDateAndTime(){ #Set up date and time automatic(internet) or manual
 		LogMaker "LOG" "DateAndTime: date and time manualy defined!"
 	fi
 }
-#--------/ Answer file /--------------------------------------------------------
-MakeAnswerFile(){
-	local title="AnswerFile"
-	local profileFile="$1"
-	local answerFile="/tmp/modified_${profileFile##*/}"
-	local text="Answer file '$answerFile' generated! You can use this file to
-		make automatic mass installs or a new one." 
-	eval 'cat <<-_eof_ >"$answerFile"
-	'"$(cat $profileFile)"'	
-	_eof_'
-	GuiMessageBox "$title" "$text" || return
-	LogMaker "LOG" "AnswerFile: Answer file generated in '$answerFile'"
-}
-#--------/ Checking Functions /-------------------------------------------------
-ValidatingEnvironment(){
-	local title="Environment Validation"
-	local text="Checking if everything is ok:"
-	local memorySize="$MachineMemSize"
-	local dirTarget="$DirTarget"
-	local dirBoot="$DirBoot"
-	local mountedRootDir="$MountedRootDir"
-	local mountedBootDir="$MountedBootDir"
-	local swap="$SwapActive"
-	local textMode="$1"
-	local efiFirmware="$EfiFirmware"
-
-	local errorText
-	#Memory
-	if [ "$memorySize" -lt 524288 ]
-	then
-		text="$text\n* Memory \Z1low\Z0: $memorySize"
-	else
-		text="$text\n* Memory ok: $memorySize"
-	fi
-	#Is partition mounted for root installation?
-	if [ "$mountedRootDir" == "$dirTarget" ]
-	then
-		text="$text\n* Root partition is mounted in '$dirTarget'."
-		#Root partition size
-		if [ "${PartitionRootSize%M}" -lt 800 ]
-		then
-			errorText="$errorText\n* Partition root with insufficient size: 
-				${PartitionRootSize##* }.\nMinimal is 800MB"
-		else
-			text="$text\n* Partition root size ok: ${PartitionRootSize##* }"
-		fi
-	else
-		errorText="$errorText\n* Have you mounted your root partition in '$dirTarget' ?"
-	fi
-	#Is partition mounted for /boot?
-	if [ "$mountedBootDir" == "$dirBoot" ]
-	then
-		text="$text\n* Boot partition is mounted in '$dirBoot'."
-		#Boot partition size
-		if [ "${PartitionBootSize%M}" -lt 100 ]
-		then
-			errorText="$errorText\n* Partition boot with insufficient size:
-			${PartitionBootSize##* }.\n Minimal is 100MB"
-		else
-			text="$text\n* Partition boot size ok: ${PartitionBootSize##* }"
-		fi
-	else
-		errorText="$errorText\n* Have you mounted your boot partition in '$dirBoot' ?"
-	fi
-	#Is there a active swap?
-	if [ -n "$swap" ]
-	then
-		text="$text\n* Swap is on in $swap"
-	else
-		text="$text\n* \Z1Have you activated you swap partition?\Z0"
-	fi
-	#Bios or EFI?
-	if IsEfi
-	then
-		text="$text\n* It has a EFI support"
-	else
-		text="$text\n* It has a bios support only"
-	fi
-	if [ -n "$errorText" ]
-	then
-		if [ -n "$textMode" ]
-		then
-			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText"
-		else
-			GuiMessageBox "$title" "$text\n$errorText"
-			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText" > /dev/null
-		fi
-	else
-		if [ -n "$textMode" ]
-		then
-			text="$(sed -r '
-				s/\\Z1/\\033[31m/
-				s/\\Z0/\\033[0m/
-				' <<<"$text")"
-			LogMaker "MSG" "SystemCheck: $text"
-		else
-			GuiMessageBox "$title" "$text"
-			LogMaker "LOG" "SystemCheck: $text"
-		fi
-	fi
-}
-
