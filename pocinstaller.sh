@@ -403,7 +403,7 @@ SystemInstallation(){
 	(echo '#!/bin/bash'
 	 sed '/^LogMaker/,/^}/!d
 		s@logFile=.*@logFile="/var/log/pocinstaller.sh"@
-		' $CommonLibFile
+		' $CommonlibFile
 	 echo "
 	 LogMaker 'MSG' 'SystemInstallation 12: Starting FirstBoot step'
 	 pacman -S $packages \\
