@@ -1,10 +1,9 @@
 #!/bin/bash
 #--------/ Header /-------------------------------------------------------------
 # pocinstaller.sh: Manual or automatic installer for Archlinux (under development)
-#
-# Site		: https://github.com/tiagotarifa/pocinstaller
-# Author	: Tiago Tarifa Munhoz
-# License	: GPLv3
+# Site		     : https://github.com/tiagotarifa/pocinstaller
+# Author	     : Tiago Tarifa Munhoz
+# License	     : GPLv3
 #
 #--------/ Description /--------------------------------------------------------
 #     Piece of Cake installer aims to be a easy and fast installer for Arch 
@@ -12,29 +11,28 @@
 # like an argument.
 #
 #--------/ Important Remarks /--------------------------------------------------
-#     To best view this code use Vim with this configuration settings:
-#  execute pathogen#infect() #optional
-#  set nocompatible
-#  filetype plugin indent on
-#  set foldenable
-#  set foldmethod=marker
-#  au FileType sh let g:sh_fold_enabled=5
-#  au FileType sh let g:is_bash=1
-#  au FileType sh set foldmethod=syntax
-#  syntax on
-#  let g:gruvbox_italic=1	#optional
-#  colorscheme gruvbox		#optional
-#  set background=light
-#  set number
-#  set tabstop=4 
-#  set softtabstop=0 
-#  set noexpandtab
-#  set shiftwidth=4
-#  set foldcolumn=2
-#  set autoindent
-#  set showmode
-#
-#    or you can use Kate software: https://kate-editor.org/
+#  To best view this code use Vim with this configuration settings (~/.vimrc):
+#		  execute pathogen#infect() #optional
+#		  set nocompatible
+#		  filetype plugin indent on
+#		  set foldenable
+#		  set foldmethod=marker
+#		  au FileType sh let g:sh_fold_enabled=5
+#		  au FileType sh let g:is_bash=1
+#		  au FileType sh set foldmethod=syntax
+#		  syntax on
+#		  let g:gruvbox_italic=1	#optional
+#		  colorscheme gruvbox		#optional
+#		  set background=light
+#		  set number
+#		  set tabstop=4 
+#		  set softtabstop=0 
+#		  set noexpandtab
+#		  set shiftwidth=4
+#		  set foldcolumn=2
+#		  set autoindent
+#		  set showmode
+#  or you can use Kate software: https://kate-editor.org/
 #--------/ Thanks /-------------------------------------------------------------
 # Brazilian shell script yahoo list: shell-script@yahoogrupos.com.br
 #   Especially: Julio (below), Itamar (funcoeszz co-author: http://funcoeszz.net)
@@ -42,12 +40,17 @@
 # The brazilian shell script (pope|master) Julio Cezar Neves who made the best
 #   portuguese book of shell script (Programação Shell Linux 11ª edição);
 #	His page: http://wiki.softwarelivre.org/TWikiBar/WebHome
-# Hartmut Buhrmester: Ho rewrite wsusoffline script for Linux. I I was inspired 
+# Hartmut Buhrmester: Ho rewrite wsusoffline script for Linux. I was inspired 
 #   by the way you did your log, and copy some code too.
 # Cidinha (my wife): For her patience and love.
 # 
 #--------/ History /------------------------------------------------------------
-#	Version: None release in:Under development 
+# Legend: '-' for features and '+' for corrections
+#  Version: 1.0 released in 2017-07-12
+#   -Automatic or manual install;
+#   -Save defined configuration on 'answer file' to use for clone systems;
+#   -Support pre configured systems to make 'answer files' and save hours of work;
+#   ...Many small others
 #--------/ Loggin /-------------------------------------------------------------
 readonly LogFile='/var/log/pocinstaller.log'
 exec 2>> $LogFile
@@ -72,7 +75,7 @@ readonly HelpMessage="    Arch Linux installer guided graphically or automatical
 readonly DirTarget="/mnt"
 readonly DirBoot="$DirTarget/boot"
 readonly DirVarLib="/var/lib/pocinstaller"
-readonly DirPoclibs="poclibs"
+readonly DirPoclibsName="poclibs"
 readonly DirProfilesName="profiles"
 #Files
 readonly FileCommonFunctions="CommonFunctions.sh"
@@ -96,19 +99,21 @@ readonly EfiFirmware='/sys/firmware/efi/efivars'
 #check if all libraries exist
 for poclib in $FileCommonFunctions $FileGuiFunctions $FileGetFunctions $FileSetFunctions
 do
-	if [ -s "$DirVarLib/$DirPoclibs/$poclib" ]
+	if [ -s "$DirVarLib/$DirPoclibsName/$poclib" ]
 	then
-		source "$DirVarLib/$DirPoclibs/$poclib"
-	elif [ -s "${0%/*}/$DirPoclibs/$poclib" ]
+		source "$DirVarLib/$DirPoclibsName/$poclib"
+		[ -z "$DirPoclibs" ] && readonly DirPoclibs="$DirVarLib/$DirPoclibsName"
+	elif [ -s "${0%/*}/$DirPoclibsName/$poclib" ]
 	then
-		source "${0%/*}/$DirPoclibs/$poclib"
+		source "${0%/*}/$DirPoclibsName/$poclib"
+		[ -z "$DirPoclibs" ] && readonly DirPoclibs="${0%/*}/$DirPoclibsName"
 	else
 		cat <<-_eof_ 
 		Error!
 		   Library file '$poclib' is not found!
-		   It should be in '$DirVarLib/$DirPoclibs/$poclib' or
-		   in a child directory called '$DirPoclibs' where 
-		   pocinstaller are. Like '${0%/*}/$DirPoclibs/$poclib'.
+		   It should be in '$DirVarLib/$DirPoclibsName/$poclib' or
+		   in a child directory called '$DirPoclibsName' where 
+		   pocinstaller are. Like '${0%/*}/$DirPoclibsName/$poclib'.
 		   POC Installer can't goes on!
 		   Exiting...
 		_eof_
@@ -138,10 +143,10 @@ fi
 trap "LogMaker 'MSG' 'pocinstaller: Aborted by user!' ; exit 255" 2
 #--------/ Main Functions /-----------------------------------------------------
 SystemInstallation(){
-	local answerFile="$1"
+	local -x answerFile="$1"
 	if [ ! -s "$answerFile" ]
 	then
-		LogMaker "ERR" "Answer file do not exist or it is empty."
+		LogMaker "ERR" "Answer file do not exist or it's empty."
 	fi
 	local dirTarget="$DirTarget"
 	local dirBoot="$DirBoot"
@@ -157,7 +162,8 @@ SystemInstallation(){
 	local fileHosts="$dirTarget/etc/hosts"
 	local fileFstab="$dirTarget/etc/fstab"
 	local fileMkinitcpioConf="$dirTarget/etc/mkinitcpio.conf"
-	local fileFirstBootScript="$dirTarget/root/first_boot.sh"
+	local fileFirstBootScriptOnTarget="$dirTarget/root/first_boot.sh"
+	local fileFirstBootScriptModel="$DirPoclibs/FirstBootModel.sh"
 	local fileSystemdUnit="$dirTarget/usr/lib/systemd/system/pocinstaller.service"
 	local intelUcode mkinitcpioHooks
 	local -x logStep="SystemInstallation 01:"
@@ -177,7 +183,7 @@ SystemInstallation(){
 		/^( +)?$/d
 		/</,$d
 		s/^/local /' "$answerFile")
-	#Testing if everithing needed is ok
+	#Testing if everything needed is ok
 	[ -n "$hostname" ] \
 		&& LogMaker "MSG" "SystemInstallation 01: Hostname value loaded!" \
 		|| LogMaker "ERR" "SystemInstallation 01: No hostname defined!"
@@ -248,7 +254,7 @@ SystemInstallation(){
 	else
 		LogMaker "MSG" "SystemInstallation 01: Repositores value loaded!"
 	fi
-	local packages="$(sed '
+	local -x packages="$(sed '
 		/<packages>/,/<\/packages>/!d
 		/^</d
 		' "$answerFile" | tr '\n' ' ')"
@@ -373,8 +379,8 @@ SystemInstallation(){
 	#Stage08: Set up the first boot
 	logStep="SystemInstallation 08:"
 	LogMaker "LOG" "$logStep Starting stage 'Set up for the first boot'"
-	SetScriptToRunOnFirstBoot "$fileFirstBootScript"
-	CreateFirstBootScript "$fileFirstBootScript"
+	SetScriptToRunOnFirstBoot "$fileFirstBootScriptOnTarget"
+	CreateFirstBootScript "$fileFirstBootScriptModel" "$fileFirstBootScriptOnTarget"
 
 	#Stage09: Running pos script
 	logStep="SystemInstallation 09:"
@@ -387,8 +393,8 @@ SystemInstallation(){
 	#Stage10: rebooting
 	LogMaker "LOG" "SystemInstallation 10: Finalizing the LOG and restarting"
 	cp "$LogFile" "$dirTarget/var/log/"
-	umount -R $dirTarget
-	shutdown -r now
+	#umount -R $dirTarget
+	#shutdown -r now
 }
 CollectingDataFromMenu(){
 	local step=Keymap
@@ -591,3 +597,6 @@ main() {
 	done
 }
 main $@
+
+
+

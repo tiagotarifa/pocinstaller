@@ -1,44 +1,40 @@
 #!/bin/bash
 #--------/ Header /-------------------------------------------------------------
-# GetFunctions.sh: Functions to get data from users and validate them for 
-#                  pocinstaller.sh
-#
+# GetFunctions.sh: Functions to get data from user or system, validate them and
+#                  use it on pocinstaller.sh
 # Site           : https://github.com/tiagotarifa/pocinstaller
 # Author         : Tiago Tarifa Munhoz
 # License        : GPL
 #
 #--------/ Description /--------------------------------------------------------
-# It has functions that get data and validate it. For example:
-# - GetHostname will get the string typed by user and verify if it' respect the 
-#   rules of a hostname name (less than 64 chars, no dots, etc)
-# - GetPassword will check the power of the password typed.
-#
-# # I'll improve this text as soon as possible. My problem right now is my english. :(
+#   It has functions that get data and validate it. I.e.
+# -GetHostname will get the string typed by user and verify if it' respect the 
+# rules of a hostname name (less than 64 chars, no dots, etc)
+# -GetPassword will check the power of the password typed.
 #
 #--------/ Important Remarks /--------------------------------------------------
-#     To best view this code use Vim with this configuration settings:
-#  execute pathogen#infect() #optional
-#  set nocompatible
-#  filetype plugin indent on
-#  set foldenable
-#  set foldmethod=marker
-#  au FileType sh let g:sh_fold_enabled=5
-#  au FileType sh let g:is_bash=1
-#  au FileType sh set foldmethod=syntax
-#  syntax on
-#  let g:gruvbox_italic=1	#optional
-#  colorscheme gruvbox		#optional
-#  set background=light
-#  set number
-#  set tabstop=4 
-#  set softtabstop=0 
-#  set noexpandtab
-#  set shiftwidth=4
-#  set foldcolumn=2
-#  set autoindent
-#  set showmode
-#
-#    or you can use Kate software: https://kate-editor.org/
+#  To best view this code use Vim with this configuration settings (~/.vimrc):
+#		  execute pathogen#infect() #optional
+#		  set nocompatible
+#		  filetype plugin indent on
+#		  set foldenable
+#		  set foldmethod=marker
+#		  au FileType sh let g:sh_fold_enabled=5
+#		  au FileType sh let g:is_bash=1
+#		  au FileType sh set foldmethod=syntax
+#		  syntax on
+#		  let g:gruvbox_italic=1	#optional
+#		  colorscheme gruvbox		#optional
+#		  set background=light
+#		  set number
+#		  set tabstop=4 
+#		  set softtabstop=0 
+#		  set noexpandtab
+#		  set shiftwidth=4
+#		  set foldcolumn=2
+#		  set autoindent
+#		  set showmode
+#  or you can use Kate software: https://kate-editor.org/
 #
 #--------/ Thanks /-------------------------------------------------------------
 # Brazilian shell script yahoo list: shell-script@yahoogrupos.com.br
@@ -52,14 +48,14 @@
 # Cidinha (my wife): For her patience and love.
 # 
 #--------/ History /------------------------------------------------------------
-#  Legend: '-' for features and '+' for corrections
-#    Version: 1.0 released in 2017-07-09
-#     -Validate information like hostname and passwords;
-#     -Summary suport with GetSummary;
-#     -Profiles support with GetProfiles;
-#     -Detect what kind of mirrolist file (livecd or installed system) and handle
-#      with that;
-#     -Loggin support;
+# Legend: '-' for features and '+' for corrections
+#  Version: 1.0 released in 2017-07-12
+#   -Validate information like hostname and passwords;
+#   -Summary suport with GetSummary;
+#   -Profiles support with GetProfiles;
+#   -Detect what kind of mirrolist file (livecd or installed system) and handle it;
+#   -Loggin support;
+#   -Many others...
 #--------/ Auxiliary for GetUsers and GetRootPassword/-------------------------------
 GetUserName(){ #Return: someonename
 	local title="User"
@@ -152,7 +148,7 @@ GetGroups(){ #Return: users,audio,video,games,...
 	echo "${groups%,}"
 }
 #--------/ Getting data from system/-------------------------------------------------
-GetGrubArguments(){
+GetGrubArguments(){ #Return grub parameters according to system (Efi or Bios) 
 	if IsEfi
 	then
 		echo "--target=x86_64-efi --efi-target=${DirBoot##$DirTarget}"
@@ -162,13 +158,13 @@ GetGrubArguments(){
 		LogMaker "LOG" "Bios only detected."
 	fi
 }
-GetMkinitcpioLvmHook() {
+GetMkinitcpioLvmHook() { #Return 'sed' command to add lvm support on /etc/mkinitcpio.conf
 	if [ "$(pvs | wc -l)" -gt 1 ] 
 	then
 		echo "/^HOOKS=/ s/block/block lvm2/;"
 	fi
 }
-GetMkinitcpioRaidHook(){
+GetMkinitcpioRaidHook(){ #Return 'sed' command to add mdadm support on /etc/mkinitcpio.conf
 	if [ -e /proc/mdstat ] 
 	then
 		echo "/^HOOKS=/ s/block/block mdadm/;"

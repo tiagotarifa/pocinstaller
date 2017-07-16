@@ -3,36 +3,35 @@
 # Commonlib.sh: Functions to support all others functions and pocinstaller.sh
 # Site        : https://github.com/tiagotarifa/pocinstaller
 # Author      : Tiago Tarifa Munhoz
-# License     : GPL
+# License     : GPL3
 #
 #--------/ Description /--------------------------------------------------------
-#     This script has functions to handle with loging, user interface (GUI), and
-# other stufs. Don't try to run this file, nothing will happend.
+#   This script has functions to handle with loging, create files, and
+# other stufs. 
 #
 #--------/ Important Remarks /--------------------------------------------------
-#     To best view this code use Vim with this configuration settings:
-#  execute pathogen#infect() #optional
-#  set nocompatible
-#  filetype plugin indent on
-#  set foldenable
-#  set foldmethod=marker
-#  au FileType sh let g:sh_fold_enabled=5
-#  au FileType sh let g:is_bash=1
-#  au FileType sh set foldmethod=syntax
-#  syntax on
-#  let g:gruvbox_italic=1	#optional
-#  colorscheme gruvbox		#optional
-#  set background=light
-#  set number
-#  set tabstop=4 
-#  set softtabstop=0 
-#  set noexpandtab
-#  set shiftwidth=4
-#  set foldcolumn=2
-#  set autoindent
-#  set showmode
-#
-#    or you can use Kate software: https://kate-editor.org/
+#  To best view this code use Vim with this configuration settings (~/.vimrc):
+#		  execute pathogen#infect() #optional
+#		  set nocompatible
+#		  filetype plugin indent on
+#		  set foldenable
+#		  set foldmethod=marker
+#		  au FileType sh let g:sh_fold_enabled=5
+#		  au FileType sh let g:is_bash=1
+#		  au FileType sh set foldmethod=syntax
+#		  syntax on
+#		  let g:gruvbox_italic=1	#optional
+#		  colorscheme gruvbox		#optional
+#		  set background=light
+#		  set number
+#		  set tabstop=4 
+#		  set softtabstop=0 
+#		  set noexpandtab
+#		  set shiftwidth=4
+#		  set foldcolumn=2
+#		  set autoindent
+#		  set showmode
+#  or you can use Kate software: https://kate-editor.org/
 #
 #--------/ Thanks /-------------------------------------------------------------
 # Brazilian shell script yahoo list: shell-script@yahoogrupos.com.br
@@ -41,13 +40,16 @@
 # The brazilian shell script (pope|master) Julio Cezar Neves who made the best
 #   portuguese book of shell script (Programação Shell Linux 11ª edição);
 #	His page: http://wiki.softwarelivre.org/TWikiBar/WebHome
-# Hartmut Buhrmester: Ho rewrite wsusoffline script for Linux. I I was inspired 
+# Hartmut Buhrmester: Ho rewrite wsusoffline script for Linux. I was inspired 
 #   by the way you did your log, and copy some code too.
 # Cidinha (my wife): For her patience and love.
 # 
 #--------/ History /------------------------------------------------------------
-#    Under development
-#
+# Legend: '-' for features and '+' for corrections
+#  Version: 1.0 released in 2017-07-12
+#   -Log maker to make a log file with date and levels;
+#   -System validation for minimal requirements;
+#   ...Many small others
 #-------------------------------------------------------------------------------
 LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
 	local logFile="$LogFile"
@@ -80,7 +82,7 @@ LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
 			;;
 	esac
 }
-WaitingNineSeconds(){
+WaitingNineSeconds(){ #Print 8 to 0 per second while user wait
 	local textMode="$1"
 	local text="Press \033[31mCTRL+C\033[0m to cancel this installation"
 	local lines=$(tput lines)
@@ -94,12 +96,12 @@ WaitingNineSeconds(){
 			sleep 1
 			continue
 		fi
-
 		[ $seconds -ge 3 ] && ( printf "\033[33m$seconds...\033[0m" ; sleep 1 )
 		[ $seconds -lt 3 ] && ( printf "\033[31m$seconds...\033[0m" ; sleep 1 )
 	done
+	echo
 }
-ValidatingEnvironment(){
+ValidatingEnvironment(){ #Verify minimal system requirements for Arch
 	local title="Environment Validation"
 	local text="Checking if everything is ok:\n"
 	local memorySize="$MachineMemSize"
@@ -192,7 +194,7 @@ ValidatingEnvironment(){
 		fi
 	fi
 }
-MakeAnswerFile(){
+MakeAnswerFile(){ #Create a answer file in /tmp with collected data
 	local title="AnswerFile"
 	local profileFile="$1"
 	local answerFile="/tmp/modified_${profileFile##*/}"
@@ -208,32 +210,26 @@ MakeAnswerFile(){
 IsEfi(){ #Returns 0 if it is a EFI system and 1 if its not.
 	[ -d "$efiFirmware" ]
 }
-CreateFirstBootScript(){
-	file="$1"
-	(echo '#!/bin/bash'
-	 sed '/^LogMaker/,/^}/!d
-		s@logFile=.*@logFile="/var/log/pocinstaller.sh"@
-		' $FileCommonFunctions
-	 echo "
-	 LogMaker 'MSG' 'SystemInstallation 12: Starting FirstBoot step'
-	 pacman -S $packages \\
-		&& LogMaker "MSG" "SystemInstallation 12: Additional packages installed." \
-		|| LogMaker "WAR" "SystemInstallation 12: Impossible to install aditional packages."
-	 systemctl disable pocinstaller
-	 LogMaker "MSG" "SystemInstallation 12: Installation has been finished."
-	 rm $fileFirstBootScript
-	 shutdown -r now
-	 "
-	) > $file
-	if [ "$?" -eq = 0 ]
+CreateFirstBootScript(){ #USE: CreateFirstBootScript </path/script_model> </path/scriptToMake>
+	scriptModel="$1"
+	scriptToMake="$2"
+
+	(
+	cp "$scriptModel" "$scriptToMake" || return
+	sed -i '/readonly FileFirstBootScriptOnTarget/ s/""/"'$scriptToMake'"/
+		' "$scriptToMake" || return
+	sed -i '/readonly Packages/ s/""/"'$packages'"/
+		' "$scriptToMake" || return
+	)
+	if [ $? -eq 0 ]
 	then
-		chmod +x $file
+		chmod +x "$scriptToMake"
 		LogMaker "MSG" "$logStep First boot script created"
 	else
 		LogMaker "ERR" "$logStep Impossible to create the first boot script."
 	fi
 }
-RunArgumentAsScript(){
+RunArgumentAsScript(){ #Convert script in a var '$@' and run it.
 	local script="$@"
 	if [ -n "$script" ]
 	then

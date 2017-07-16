@@ -1,4 +1,4 @@
-##Peace of Cake Installer: pocinstaller.sh
+##Piece of Cake Installer: pocinstaller.sh
 
 **UNDER DEVELOPMENT.**
 

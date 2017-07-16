@@ -1,40 +1,38 @@
 #!/bin/bash
 #--------/ Header /-------------------------------------------------------------
-# GuiFunctions.sh: Functions to interact with user and take some data.
-#
+# GuiFunctions.sh: Functions to interact with user using a third software like
+#                  dialog. It's part of Piece of Cake Installer
 # Site           : https://github.com/tiagotarifa/pocinstaller
 # Author         : Tiago Tarifa Munhoz
-# License        : GPL
+# License        : GPL3
 #
 #--------/ Description /--------------------------------------------------------
-# Functions to interact with user and take data like hostname, repositories, etc.
-# All of then was made using 'dialog'.
-# I'll improve this text as soon as possible. My problem right now is my english. :(
+#   Functions to interact with user and take data like hostname, repositories, etc.
+#   All of then was made using 'dialog'.
 #
 #--------/ Important Remarks /--------------------------------------------------
-#     To best view this code use Vim with this configuration settings:
-#  execute pathogen#infect() #optional
-#  set nocompatible
-#  filetype plugin indent on
-#  set foldenable
-#  set foldmethod=marker
-#  au FileType sh let g:sh_fold_enabled=5
-#  au FileType sh let g:is_bash=1
-#  au FileType sh set foldmethod=syntax
-#  syntax on
-#  let g:gruvbox_italic=1	#optional
-#  colorscheme gruvbox		#optional
-#  set background=light
-#  set number
-#  set tabstop=4 
-#  set softtabstop=0 
-#  set noexpandtab
-#  set shiftwidth=4
-#  set foldcolumn=2
-#  set autoindent
-#  set showmode
-#
-#    or you can use Kate software: https://kate-editor.org/
+#  To best view this code use Vim with this configuration settings (~/.vimrc):
+#		  execute pathogen#infect() #optional
+#		  set nocompatible
+#		  filetype plugin indent on
+#		  set foldenable
+#		  set foldmethod=marker
+#		  au FileType sh let g:sh_fold_enabled=5
+#		  au FileType sh let g:is_bash=1
+#		  au FileType sh set foldmethod=syntax
+#		  syntax on
+#		  let g:gruvbox_italic=1	#optional
+#		  colorscheme gruvbox		#optional
+#		  set background=light
+#		  set number
+#		  set tabstop=4 
+#		  set softtabstop=0 
+#		  set noexpandtab
+#		  set shiftwidth=4
+#		  set foldcolumn=2
+#		  set autoindent
+#		  set showmode
+#  or you can use Kate software: https://kate-editor.org/
 #
 #--------/ Thanks /-------------------------------------------------------------
 # Brazilian shell script yahoo list: shell-script@yahoogrupos.com.br
@@ -388,6 +386,7 @@ GuiTimeBox(){ #Use: GuiTimeBox "Window's Title" "Text to show" | Return: '%H%M'
 		--time-format '%H%M'			\
 		--timebox "$text" 0 $cols
 }
+#--------/ Not implemented /----------------------------------------------------
 GuiIntro(){ #Do not use. In development...
 	local text="Bem vindo"
 	local col=10
