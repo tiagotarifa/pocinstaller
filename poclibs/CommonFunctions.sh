@@ -51,7 +51,7 @@
 #   -System validation for minimal requirements;
 #   ...Many small others
 #-------------------------------------------------------------------------------
-LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
+LogMaker(){ #Use: <MSG|LOG|WAR|ERR> <Message>
 	local logFile="$LogFile"
 	local level="${1^^}" ; shift
 	local message="$@"
@@ -101,39 +101,26 @@ WaitingNineSeconds(){ #Print 8 to 0 per second while user wait
 	done
 	echo
 }
-ValidatingEnvironment(){ #Verify minimal system requirements for Arch
-	local title="Environment Validation"
-	local text="Checking if everything is ok:\n"
-	local memorySize="$MachineMemSize"
+IsTargetMounted(){ #Verify if root and boot are mounted and swap is active.
+	local mountedRootDir="$(df --output=target "$DirTarget" 2>/dev/null | grep "$DirTarget")"
+	local mountedBootDir="$(df --output=target "$DirBoot" 2>/dev/null | grep "$DirBoot")"
+	local partitionRootSize="$(df --output=size -BM /mnt 2>/dev/null | tail -1)"
+	local partitionBootSize="$(df --output=size -BM /mnt/boot 2>/dev/null | tail -1)"
+	local swapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
 	local dirTarget="$DirTarget"
 	local dirBoot="$DirBoot"
-	local mountedRootDir="$MountedRootDir"
-	local mountedBootDir="$MountedBootDir"
-	local swap="$SwapActive"
-	local textMode="$1"
-	local efiFirmware="$EfiFirmware"
-	local alertNeeded rtn
-
-	local errorText
-	#Memory
-	if [ "$memorySize" -lt 524288 ]
-	then
-		text="$text* Memory \Z1low\Z0: $memorySize\n"
-		alertNeeded=1
-	else
-		text="$text* Memory ok: $memorySize\n"
-	fi
+	local text errorText
 	#Is partition mounted for root installation?
 	if [ "$mountedRootDir" == "$dirTarget" ]
 	then
 		text="$text* Root partition is mounted in '$dirTarget'.\n"
 		#Root partition size
-		if [ "${PartitionRootSize%M}" -lt 800 ]
+		if [ "${partitionRootSize%M}" -lt 800 ]
 		then
 			errorText="$errorText* Partition root with insufficient size: 
-				${PartitionRootSize##* }.\Z1Minimal is 800MB\Z0\n"
+				${partitionRootSize##* }.\Z1Minimal is 800MB\Z0\n"
 		else
-			text="$text* Partition root size ok: ${PartitionRootSize##* }\n"
+			text="$text* Partition root size ok: ${partitionRootSize##* }\n"
 		fi
 	else
 		errorText="$errorText* Have you mounted your root partition in '$dirTarget' ?\n"
@@ -143,23 +130,47 @@ ValidatingEnvironment(){ #Verify minimal system requirements for Arch
 	then
 		text="$text* Boot partition is mounted in '$dirBoot'.\n"
 		#Boot partition size
-		if [ "${PartitionBootSize%M}" -lt 100 ]
+		if [ "${partitionBootSize%M}" -lt 100 ]
 		then
 			errorText="$errorText* Partition boot with insufficient size:
-			${PartitionBootSize##* }.\Z1Minimal is 100MB\Z0\n"
+			${partitionBootSize##* }.\Z1Minimal is 100MB\Z0\n"
 		else
-			text="$text* Partition boot size ok: ${PartitionBootSize##* }\n"
+			text="$text* Partition boot size ok: ${partitionBootSize##* }\n"
 		fi
 	else
 		errorText="$errorText* Have you mounted your boot partition in '$dirBoot' ?\n"
 	fi
 	#Is there a active swap?
-	if [ -n "$swap" ]
+	if [ -n "$swapActive" ]
 	then
-		text="$text* Swap is on in $swap\n"
+		text="$text* Swap is on in $swapActive\n"
 	else
 		text="$text* \Z1Have you activated your swap partition?\Z0\n"
-		alertNeeded=1
+	fi
+	if [ -n "$errorText" ]
+	then
+		LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText"
+	else
+		text="$(sed -r '
+			s/\\Z1/\\033[31m/
+			s/\\Z0/\\033[0m/
+			' <<<"$text")"
+		LogMaker "MSG" "SystemCheck: $text"
+	fi
+}
+ValidatingMinimumRequirement(){ #Verify minimal system requirements for Arch
+	local title="Environment Validation"
+	local text="Checking if everything is ok:\n"
+	local disksAndSizes="$(lsblk --nodeps -n -b -o NAME,SIZE)"
+	local memorySize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
+	local textMode="$1"
+	local disk size disks errorText
+	#Memory
+	if [ "$memorySize" -lt 524288 ]
+	then
+		text="$text* Memory \Z1low\Z0: $memorySize\n"
+	else
+		text="$text* Memory ok: $memorySize\n"
 	fi
 	#Bios or EFI?
 	if IsEfi
@@ -167,6 +178,20 @@ ValidatingEnvironment(){ #Verify minimal system requirements for Arch
 		text="$text* It has a EFI support\n"
 	else
 		text="$text* It has a bios support only\n"
+	fi
+	#There is a one or more disks greater than 10GB
+	while read disk size
+	do
+		if [ "$size" -gt 5368709120 ]
+		then
+			disks="${disks}${disk} "
+		fi
+	done <<<"$disksAndSizes"
+	if [ -z "$disks" ]
+	then
+		errorText="$errorText* There is no a single disk greater than 5GB to install Arch Linux!\n"
+	else
+		text="$text* Hard Disks that can be use to install Arch Linux: '$disks'\n"
 	fi
 	if [ -n "$errorText" ]
 	then
@@ -194,51 +219,33 @@ ValidatingEnvironment(){ #Verify minimal system requirements for Arch
 		fi
 	fi
 }
-MakeAnswerFile(){ #Create a answer file in /tmp with collected data
-	local title="AnswerFile"
-	local profileFile="$1"
-	local answerFile="/tmp/modified_${profileFile##*/}"
-	local text="Answer file '$answerFile' generated! You can use this file to
-		make automatic mass installs or a new one." 
-	eval 'cat <<-_eof_ >"$answerFile"
-	'"$(cat $profileFile)"'	
-	_eof_'
-	GuiMessageBox "$title" "$text" || return
-	LogMaker "LOG" "AnswerFile: Answer file generated in '$answerFile'"
-	echo "$answerFile"
-}
 IsEfi(){ #Returns 0 if it is a EFI system and 1 if its not.
+	local efiFirmware='/sys/firmware/efi/efivars'
 	[ -d "$efiFirmware" ]
 }
-CreateFirstBootScript(){ #USE: CreateFirstBootScript </path/script_model> </path/scriptToMake>
-	scriptModel="$1"
-	scriptToMake="$2"
+PacStrap(){ #Use: PacStrap /target 
+	local target="$1"
+	local packages="base grub btrfs-progs"
 
-	(
-	cp "$scriptModel" "$scriptToMake" || return
-	sed -i '/readonly FileFirstBootScriptOnTarget/ s/""/"'$scriptToMake'"/
-		' "$scriptToMake" || return
-	sed -i '/readonly Packages/ s/""/"'$packages'"/
-		' "$scriptToMake" || return
-	)
-	if [ $? -eq 0 ]
-	then
-		chmod +x "$scriptToMake"
-		LogMaker "MSG" "$logStep First boot script created"
-	else
-		LogMaker "ERR" "$logStep Impossible to create the first boot script."
+	if grep -Eq 'Intel' /proc/cpuinfo
+	then 
+		packages="$packages intel-ucode"
+		LogMaker "LOG" "$logStep Intel CPU detected! Package intel-ucode will be installed"
 	fi
+	pacstrap $target $packages \
+		&& LogMaker "MSG" "$logStep Arch Linux base system was successfully installed on '$target'!" \
+		|| LogMaker "ERR" "$logStep Impossible to install Arch Linux base system on '$target'!"
 }
-RunArgumentAsScript(){ #Convert script in a var '$@' and run it.
-	local script="$@"
-	if [ -n "$script" ]
+DownloadPackages(){ #Use: /target/path package01 package02 ...
+	local target="$1"
+	local packages="$2"
+	if [ -n "$packages" ]
 	then
-		LogMaker "MSG" "$logStep Running custom script from answer file"
-		(
-			eval "$script"
-		) && LogMaker "MSG" "$logStep Script execution has been done." \
-		  || LogMaker "ERR" "$logStep Script returned with error. Exiting..."
+		LogMaker "MSG" "$logStep Downloading all packages to install on first boot"
+		arch-chroot $target pacman -Syw --noconfirm $packages 			\
+			&& LogMaker "MSG" "$logStep Downloaded additional packages on target '$target'." 	\
+			|| LogMaker "WAR" "$logStep Impossible to download additional packages on target '$target'."
 	else
-		LogMaker "MSG" "$logStep Script not defined in answer file."
+		LogMaker "MSG" "$logStep No packages defined on answer file. Download it's not necessary!"
 	fi
 }

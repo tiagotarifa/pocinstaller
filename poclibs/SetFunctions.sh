@@ -54,82 +54,6 @@
 #   -Network functions to fix IP and DHCP;
 #   -Set up grub according by system I.e: Efi(x86_64) or bios(x86)
 #   ...Many small others
-#--------/ Ordinary functions /-------------------------------------------------
-SetDateAndTime(){ #Set up date and time automatic(internet) or manual
-	local title="Date and Time"
-	local text="Your system's date and time could not be set automatically.\n
-		Manually set it"
-	local siteToPing="www.google.com.br"
-	local textMode="$1"
-	local date time
-
-	if ping -c1 "$siteToPing" > /dev/null 2>&1 
-	then
-		timedatectl set-ntp true
-	else
-		if [ -n "$textMode" ] 
-		then 
-			LogMaker "MSG" "DateAndTime: Impossible to automatic update the system clock!"
-			WaitingNineSeconds
-			return 0
-		else
-			LogMaker "LOG" "DateAndTime: Impossible to automatic update the system clock!"
-		fi
-		date="$(GuiCalendar "$title" "$text")" || return
-		time="$(GuiTimeBox "$title" "$text")"  || return
-		date "${date%_*}${time}${date#*_}"	   || return
-		hwclock -w							   || return
-		LogMaker "LOG" "DateAndTime: date and time manualy defined!"
-	fi
-}
-SetScriptToRunOnFirstBoot(){ #Configure systemd on target system to run a script on boot
-	local script="$1"
-	if [ -n "$packages" ]
-	then
-		LogMaker "MSG" "$logStep Downloading all packages to install on first boot"
-		arch-chroot $dirTarget pacman -Syw --noconfirm $packages \
-			&& LogMaker "MSG" "$logStep Downloaded additional packages." \
-			|| LogMaker "WAR" "$logStep Impossible to download additional packages."
-	fi
-	cat >>$fileSystemdUnit <<-_eof_
-		[Unit]
-		Description=POC installer finishing installation
-
-		[Service]
-		Type=oneshot
-		ExecStart=${fileFirstBootScriptOnTarget#$dirTarget}
-
-		[Install]
-		WantedBy=multi-user.target
-	_eof_
-	arch-chroot $dirTarget systemctl enable ${fileSystemdUnit#$dirTarget} \
-		&& LogMaker "MSG" "$logStep '$fileFirstBootScriptOnTarget' will run on first boot." \
-		|| LogMaker "ERR" "$logStep Impossible to enable '$fileFirstBootScriptOnTarget' to run on first boot."
-}
-SetGrubOnTarget(){ #Set up grub according to system. I.e: Efi(x86_64) or bios(x86)
-	local dirBoot="$DirBoot"
-	local diskBoot="$1"
-	local grubArgs="$2"
-	LogMaker "MSG" "$logStep Installing grub..."
-	eval arch-chroot $dirTarget grub-install $grubArgs $diskBoot\
-		&& LogMaker "MSG" "$logStep Grub installed with arguments '$grubArgs'" \
-		|| LogMaker "ERR" "$logStep Impossible to install grub! Grub arguments was '$grubArgs'"
-	eval arch-chroot $dirTarget grub-mkconfig -o "/boot/grub/grub.cfg" \
-		&& LogMaker "MSG" "$logStep 'grub.cfg' created on '$dirBoot/grub/grub.cfg'" \
-		|| LogMaker "ERR" "$logStep Impossible to create '$dirBoot/grub/grub.cfg'"
-
-	if IsEfi 
-	then 
-		#Workaround for some motherboards
-		#Reference: https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Bootloader
-		(
-		mkdir -p $dirBoot/efi/efi/boot
-		cp $dirBoot/efi/efi/arch/grubx64.efi $dirBoot/efi/efi/boot/bootx64.efi
-		) \
-			&& LogMaker "MSG" "$logStep Workaround made for EFI bios" \
-			|| LogMaker "WAR" "$logStep Impossible to make a workaround for EFI bios"
-	fi
-}
 #--------/ Network functions /--------------------------------------------------
 SetDHCP(){ #Use: SetDHCP <enpXsX|wlpXsX|or any name for this device>
 	local device="$1"
@@ -162,7 +86,7 @@ SetDHCP(){ #Use: SetDHCP <enpXsX|wlpXsX|or any name for this device>
 	fi
 	LogMaker "LOG" "Network: Set '$ip' on '$device'."
 }
-SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
+SetFixedIP(){ #Use: SetFixedIP <enp1s3|wlp3s0b1>
 	local device="$1"
 	local step=IP
 	local ip gateway dns 
@@ -220,7 +144,7 @@ SetFixedIP() { #Use: SetFixedIP <enp1s3|wlp3s0b1>
 		return 1
 	fi
 }
-SetEthernet() { #Use: SetEthernet ethernetDeviceName
+SetEthernet(){ #Use: SetEthernet ethernetDeviceName
 	local device="$1"
 	local title="Ethernet"
 	local text="Select a way to set up '$device'"
@@ -230,7 +154,7 @@ SetEthernet() { #Use: SetEthernet ethernetDeviceName
 		Fixed_Address) SetFixedIP "$device"	;;
 	esac
 }
-SetWireless() { #Use: SetWireless wirelessDeviceName
+SetWireless(){ #Use: SetWireless wirelessDeviceName
 	local device="$1"
 	local title="Wireless"
 	local wpaConfig="/etc/wpa_supplicant/${device}.conf"
@@ -298,4 +222,194 @@ SetNetworkConfiguration(){ #Set up the network for installation | Use: --text-mo
 			return 1
 		fi
 	fi
+}
+#--------/ Ordinary functions /-------------------------------------------------
+SetDateAndTime(){ #Set up date and time automatic(internet) or manual
+	local title="Date and Time"
+	local text="Your system's date and time could not be set automatically.\n
+		Manually set it"
+	local siteToPing="www.google.com.br"
+	local textMode="$1"
+	local date time
+
+	if ping -c1 "$siteToPing" > /dev/null 2>&1 
+	then
+		timedatectl set-ntp true
+	else
+		if [ -n "$textMode" ] 
+		then 
+			LogMaker "MSG" "DateAndTime: Impossible to automatic update the system clock!"
+			WaitingNineSeconds
+			return 0
+		else
+			LogMaker "LOG" "DateAndTime: Impossible to automatic update the system clock!"
+		fi
+		date="$(GuiCalendar "$title" "$text")" || return
+		time="$(GuiTimeBox "$title" "$text")"  || return
+		date "${date%_*}${time}${date#*_}"	   || return
+		hwclock -w							   || return
+		LogMaker "LOG" "DateAndTime: date and time manualy defined!"
+	fi
+}
+SetScriptToRunOnFirstBoot(){ #Use: /target/path /path/script/without/target/path
+	local target="$1"
+	local script="$2"
+	local systemdGetty="$target/etc/systemd/system/getty@tty1.service.d/override.conf"
+	local bashRoot="$target/root/.bash_profile"
+	( 
+	echo "/root/first_boot.sh" >> "$bashRoot" || return
+	mkdir -m 755 -p "${systemdGetty%/*}"		|| return
+	cat > "$systemdGetty" <<-_eof_
+		[Service]
+		ExecStart=
+		ExecStart=-/usr/bin/agetty --autologin root --noclear %I \$TERM
+	_eof_
+	) && LogMaker "MSG" "$logStep '$script' will run on first boot." \
+	  || LogMaker "ERR" "$logStep Impossible to enable '$script' to run on first boot."
+}
+SetGrubOnTarget(){ #Set up grub according to system. I.e: Efi(x86_64) or bios(x86)
+	local dirTarget="$DirTarget"
+	local dirBoot="$DirBoot"
+	local partitionBoot="$(df --output=source "$dirBoot" 2>/dev/null | grep 'dev')"
+	local diskBoot=${partitionBoot%[0-9]}
+	local grubArgs="$1"
+	LogMaker "MSG" "$logStep Installing grub..."
+	eval arch-chroot $dirTarget grub-install $grubArgs $diskBoot\
+		&& LogMaker "MSG" "$logStep Grub installed with arguments '$grubArgs $diskBoot'" \
+		|| LogMaker "ERR" "$logStep Impossible to install grub! Grub arguments was '$grubArgs $diskBoot'"
+	eval arch-chroot $dirTarget grub-mkconfig -o "/boot/grub/grub.cfg" \
+		&& LogMaker "MSG" "$logStep 'grub.cfg' created on '$dirBoot/grub/grub.cfg'" \
+		|| LogMaker "ERR" "$logStep Impossible to create '$dirBoot/grub/grub.cfg'"
+
+	if IsEfi 
+	then 
+		#Workaround for some motherboards
+		#Reference: https://wiki.gentoo.org/wiki/Handbook:AMD64/Installation/Bootloader
+		(
+		mkdir -p $dirBoot/efi/efi/boot
+		cp $dirBoot/efi/efi/arch/grubx64.efi $dirBoot/efi/efi/boot/bootx64.efi
+		) \
+			&& LogMaker "MSG" "$logStep Workaround made for EFI bios" \
+			|| LogMaker "WAR" "$logStep Impossible to make a workaround for EFI bios"
+	fi
+}
+SetLocales(){ #Use: SetLocales /target 's/^#en_US/en_US/'
+	local target="$1"
+	local locales="$2"
+	local localeGen="$target/etc/locale.gen"
+	sed -ri "$locales" $localeGen											\
+		&& LogMaker "MSG" "$logStep Locales defined in $localeGen"			\
+		|| LogMaker "ERR" "$logStep Impossible to set locales in $localeGen"
+	arch-chroot $target locale-gen 											\
+		&& LogMaker "MSG" "$logStep Locales generated" 						\
+		|| LogMaker "ERR" "$logStep Impossible to generate locales"
+}
+SetRepositories(){ #Use: SetRepositories /target "$multilib" 's@^#http://repo@http://repo@'
+	local target="$1"
+	local multilib="$2"
+	local repositories="$3"
+	local fileMirrorlist="$target/etc/pacman.d/mirrorlist"
+	local filePacmanConf="$target/etc/pacman.conf"
+	sed -i 's/^S/#S/' $fileMirrorlist													\
+		&& LogMaker "MSG" "$logStep Disable all repositories in $fileMirrorlist"		\
+		|| LogMaker "ERR" "$logStep Impossible to disable all repositories in $fileMirrorlist"
+	sed -i "$repositories" $fileMirrorlist												\
+		&& LogMaker "MSG" "$logStep Repositories defined in $fileMirrorlist"			\
+		|| LogMaker "ERR" "$logStep Impossible to set repositories in $fileMirrorlist"
+	if [ "$multilib" == "yes" ]
+	then
+		sed -i '/^#\[multilib\]/,/#Include/ s/^#//' $filePacmanConf						\
+			&& LogMaker "MSG" "$logStep Multilib support enabled in '$filePacmanConf'"	\
+			|| LogMaker "ERR" "$logStep Impossible to enable multilib support in '$filePacmanConf'" 
+	else
+		LogMaker "MSG" "$logStep Multilib support has been disabled!"
+	fi
+}
+SetLanguage(){ #Use: SetLanguage /target "pt_BR.UTF-8"
+	local target="$1"
+	local language="$2"
+	local file="$target/etc/locale.conf"
+	echo "LANG=$language" > $file										\
+		&& LogMaker "MSG" "$logStep Language defined in $file"			\
+		|| LogMaker "ERR" "$logStep Impossible to set language in $file"
+}
+SetKeymap(){ #Use: SetKeymap /target "br-abnt2"
+	local target="$1"
+	local keymap="$2"
+	local file="$target/etc/vconsole.conf"
+	echo "KEYMAP=$keymap" > $file												\
+		&& LogMaker "MSG" "$logStep Keyboard layout defined in $file"			\
+		|| LogMaker "ERR" "$logStep Impossible to set keyboard layout in $file"
+}
+SetHostname(){ #Use: SetHostname /target "hostname"
+	local target="$1"
+	local hostname="$2"
+	local fileHostname="$target/etc/hostname"
+	local fileHosts="$target/etc/hosts"
+	echo "$hostname" > $fileHostname												\
+		&& LogMaker "MSG" "$logStep Hostname defined in $fileHostname"				\
+		|| LogMaker "ERR" "$logStep Impossible to set '$hostname' in $fileHostname"
+	echo -e "127.0.0.1\t${hostname}.localdomain\t$hostname" >> $fileHosts			\
+		&& LogMaker "MSG" "$logStep Local DNS defined in $fileHosts"				\
+		|| LogMaker "ERR" "$logStep Impossible to set local DNS in $fileHosts"
+}
+SetMkinitcpioHooks(){ #Use: SetMkinitcpioHooks /target 
+	local target="$1"
+	local fileMkinitcpioConf="$target/etc/mkinitcpio.conf"
+	local hooks
+	if [ "$(pvs | wc -l)" -gt 1 ] 
+	then
+		hooks="/^HOOKS=/ s/block/block lvm2/;"
+		LogMaker "MSG" "$logStep Lvm2 support added in mkinitcpio!"
+	fi
+	if [ -e /proc/mdstat ] 
+	then
+		hooks="$hooks /^HOOKS=/ s/block/block mdadm/"
+		LogMaker "MSG" "$logStep Raid (mdadm) support added in mkinitcpio!"
+	fi
+	if [ -n "$hooks" ]
+	then
+		sed -i "$hooks" $fileMkinitcpioConf 												\
+			&& LogMaker "MSG" "$logStep Hooks detected are defined in $fileMkinitcpioConf" 	\
+			|| LogMaker "ERR" "$logStep Impossible to set hooks in $fileMkinitcpioConf"
+	fi
+}
+SetFstab(){ #Use: SetFstab /target
+	local target="$1"
+	local fstab="$target/etc/fstab"
+	genfstab -p -U $target >> $fstab								\
+		&& LogMaker "MSG" "$logStep $fstab generated"				\
+		|| LogMaker "ERR" "$logStep Impossible to generate $fstab"
+}
+SetTimezone(){ #Use: SetTimezone /target "America/Sao_Paulo"
+	local target="$1"
+	local timezone="$2"
+	local fileLocaltime="/etc/localtime"
+	arch-chroot $target ln -sf /usr/share/zoneinfo/$timezone $fileLocaltime			\
+		&& LogMaker "MSG" "$logStep Timezone defined in $fileLocaltime" 			\
+		|| LogMaker "ERR" "$logStep Impossible to set timezone in $fileLocaltime"
+}
+SetHardwareClock(){ #Use: SetHardwareClock /target
+	local target="$1"
+	arch-chroot $target hwclock --systohc 											 \
+		&& LogMaker "MSG" "$logStep Hardware clock defined and /etc/adjtime created" \
+		|| LogMaker "ERR" "$logStep Impossible to set hardware clock"
+}
+SetUsers(){ #Use: SetUsers /target "useraddLine01\nuseraddLine02\n..." 
+	local target="$1"
+	local users="$2"
+	local useraddLine
+	while read useraddLine
+	do
+		eval arch-chroot $target useradd "$useraddLine" '			  \
+			&& LogMaker "MSG" "$logStep User '${useraddLine##* }' added!" \
+			|| LogMaker "ERR" "$logStep Impossible to add user '${useraddLine##* }'"'
+	done <<<"$users"
+}
+SetPasswords(){ #Use: SetPasswords /target "root:md5pwd\nuser01:md5pwd\n..."
+	local target="$1"
+	local passwords="$2"
+	chpasswd -e -R $target <<<"$passwords" 				\
+		&& LogMaker "MSG" "$logStep Passwords defined" 	\
+		|| LogMaker "ERR" "$logStep Some or all passwords was impossible to set"
 }

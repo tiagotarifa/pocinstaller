@@ -55,13 +55,14 @@
 #   -Set up grub according by system I.e: Efi(x86_64) or bios(x86)
 #   ...Many small others
 #--------/ Ordinary functions /-------------------------------------------------
-readonly PreInitialScript="/root/preinitial.sh"
-readonly PosInitialScript="/root/posinitial.sh"
-readonly Step="SystemInstallation 11:"
-readonly FileFirstBootScriptOnTarget=""
-readonly Packages=""
+readonly LogFile="/var/log/pocinstaller.log"
+exec 2>> $LogFile
+readonly PreInitialScript="/root/pre-initial.sh"
+readonly PosInitialScript="/root/pos-initial.sh"
+readonly SystemdGetty="/etc/systemd/system/getty@tty1.service.d/override.conf"
+readonly FirstBootScript="$0"
 LogMaker() { #Use: <MSG|LOG|WAR|ERR> <Message>
-	local logFile="/var/log/pocinstaller.log"
+	local logFile="$LogFile"
 	local level="${1^^}" ; shift
 	local message="$@"
 	local date="[$(date '+%Y/%m/%d %H:%M:%S')]"
@@ -112,15 +113,16 @@ PosInitial(){
 	fi
 }
 Installation(){
-	pacman -Sy "$Packages" \
+	pacman -S --noconfirm $Packages \
 		&& LogMaker "LOG" "$Step Installation packages has been finish!" \
 		|| LogMaker "ERR" "$Step Impossible to install packages!" \"
 }
 Finishing(){
 	LogMaker "LOG" "$Step Finishing installation!"
-	systemctl disable pocinstaller
+	rm -f "$SystemdGetty" && rmdir "${SystemdGetty%/*}"
+	rm "$FirstBootScript" "$PreInitialScript" "$PosInitialScript" /root/.bash_profile
+	ln -sf "/usr/lib/systemd/system/getty@.service" "/etc/systemd/system/getty.target.wants/getty@tty1.service"
 	LogMaker "LOG" "$Step Rebooting...!"
-	rm "$FileFirstBootScriptOnTarget" "$PreInitialScript" "$PosInitialScript"
 	shutdown -r now
 }
 LogMaker "LOG" "$Step Starting Stage 'Finishing installation'!"

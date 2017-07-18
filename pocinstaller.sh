@@ -77,27 +77,12 @@ readonly DirBoot="$DirTarget/boot"
 readonly DirVarLib="/var/lib/pocinstaller"
 readonly DirPoclibsName="poclibs"
 readonly DirProfilesName="profiles"
-#Files
-readonly FileCommonFunctions="CommonFunctions.sh"
-readonly FileGuiFunctions="GuiFunctions.sh"
-readonly FileGetFunctions="GetFunctions.sh"
-readonly FileSetFunctions="SetFunctions.sh"
-readonly FileBaseProfile="Base_Packages_Only.cfg"
-#Partition
-readonly PartitionBoot="$(df --output=source "$DirBoot" 2>/dev/null | grep 'dev')"
-#Disk
-readonly DiskBoot=${PartitionBoot%[0-9]}
-#Collecting environment information
-readonly MachineMemSize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
-readonly MountedRootDir="$(df --output=target "$DirTarget" 2>/dev/null | grep "$DirTarget")"
-readonly PartitionRootSize="$(df --output=size -BM /mnt 2>/dev/null | tail -1)"
-readonly MountedBootDir="$(df --output=target "$DirBoot" 2>/dev/null | grep "$DirBoot")"
-readonly PartitionBootSize="$(df --output=size -BM /mnt/boot 2>/dev/null | tail -1)"
-readonly SwapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
-readonly EfiFirmware='/sys/firmware/efi/efivars'
+#Libs
+readonly PocLibs="CommonFunctions.sh GuiFunctions.sh GetFunctions.sh SetFunctions.sh MakeFunctions.sh"
+readonly FileBaseProfile="Base_Only.cfg"
 #--------/ Check pocinstaller /------------------------------------------------
 #check if all libraries exist
-for poclib in $FileCommonFunctions $FileGuiFunctions $FileGetFunctions $FileSetFunctions
+for poclib in $PocLibs
 do
 	if [ -s "$DirVarLib/$DirPoclibsName/$poclib" ]
 	then
@@ -149,31 +134,14 @@ SystemInstallation(){
 		LogMaker "ERR" "Answer file do not exist or it's empty."
 	fi
 	local dirTarget="$DirTarget"
-	local dirBoot="$DirBoot"
-	local diskBoot="$DiskBoot"
-	local fileLocaleGen="$dirTarget/etc/locale.gen"
-	local fileLocaleConf="$dirTarget/etc/locale.conf"
-	local fileMirrorlistOnRoot="/etc/pacman.d/mirrorlist"
-	local fileMirrorlistOnMounted="$dirTarget/etc/pacman.d/mirrorlist"
-	local filePacmanConfOnRoot="/etc/pacman.conf"
-	local filePacmanConfOnMounted="$dirTarget/etc/pacman.conf"
-	local fileVconsole="$dirTarget/etc/vconsole.conf"
-	local fileHostname="$dirTarget/etc/hostname"
-	local fileHosts="$dirTarget/etc/hosts"
-	local fileFstab="$dirTarget/etc/fstab"
-	local fileMkinitcpioConf="$dirTarget/etc/mkinitcpio.conf"
-	local fileFirstBootScriptOnTarget="$dirTarget/root/first_boot.sh"
-	local fileFirstBootScriptModel="$DirPoclibs/FirstBootModel.sh"
-	local fileSystemdUnit="$dirTarget/usr/lib/systemd/system/pocinstaller.service"
-	local intelUcode mkinitcpioHooks
+	local fileFirstBootScript="$dirTarget/root/first_boot.sh"
+	local preScript='/tmp/pre-script.sh'
+	local posScript='/tmp/pos-script.sh'
 	local -x logStep="SystemInstallation 01:"
 
-	LogMaker "LOG" "SystemInstallation 01: Starting stage 'Collecting information from answer file'."
-	if grep -Eq 'Intel' /proc/cpuinfo
-	then 
-		intelUcode="intel-ucode"
-		LogMaker "LOG" "SystemInstallation 01: Intel CPU detected! Package intel-ucode will be installed"
-	fi
+#---/ SystemInstallation 01: Starting stage Collecting information from answer file /---
+	logStep="SystemInstallation 01:"
+	LogMaker "LOG" "$logStep Starting stage 'Collecting information from answer file'."
 
 	# It's collect hostname, language, keyboard, timezone, multilib, keymap
 	# and grub argumenst (grubArgs) from answer file and set it like a local
@@ -185,50 +153,49 @@ SystemInstallation(){
 		s/^/local /' "$answerFile")
 	#Testing if everything needed is ok
 	[ -n "$hostname" ] \
-		&& LogMaker "MSG" "SystemInstallation 01: Hostname value loaded!" \
-		|| LogMaker "ERR" "SystemInstallation 01: No hostname defined!"
+		&& LogMaker "MSG" "$logStep Hostname value loaded!" \
+		|| LogMaker "ERR" "$logStep No hostname defined!"
 	[ -n "$timezone" ] \
-		&& LogMaker "MSG" "SystemInstallation 01: Timezone value loaded!" \
-		|| LogMaker "ERR" "SystemInstallation 01: No timezone defined!"
+		&& LogMaker "MSG" "$logStep Timezone value loaded!" \
+		|| LogMaker "ERR" "$logStep No timezone defined!"
 	[ -n "$grubArgs" ] \
-		&& LogMaker "MSG" "SystemInstallation 01: Grub arguments loaded!" \
-		|| LogMaker "ERR" "SystemInstallation 01: No grub arguments defined!"
-
+		&& LogMaker "MSG" "$logStep Grub arguments loaded!" \
+		|| LogMaker "ERR" "$logStep No grub arguments defined!"
 	if [ -z "$language" ] 
 	then
 		local language="en_US.UTF-8"
-		LogMaker "WAR" "SystemInstallation 01: No language defined! 'en_US.UTF-8' loaded"
+		LogMaker "WAR" "$logStep No language defined! 'en_US.UTF-8' loaded"
 	else
-		LogMaker "MSG" "SystemInstallation 01: Language value loaded!"
+		LogMaker "MSG" "$logStep Language value loaded!"
 	fi
 	if [ -z "$multilib" ] 
 	then 
 		multilib="yes"
-		LogMaker "WAR" "SystemInstallation 01: No multilib defined! Set multilib suport for installation."
+		LogMaker "WAR" "$logStep No multilib defined! Set multilib suport for installation."
 	else
-		LogMaker "MSG" "SystemInstallation 01: Multilib value loaded!"
+		LogMaker "MSG" "$logStep Multilib value loaded!"
 	fi
 	if [ -z "$keyboard" ] 
 	then
 		local keyboard="us"
-		LogMaker "WAR" "SystemInstallation 01: No keyboard defined. 'us' loaded"
+		LogMaker "WAR" "$logStep No keyboard defined. 'us' loaded"
 	else
-		LogMaker "MSG" "SystemInstallation 01: Keyboard value loaded."
+		LogMaker "MSG" "$logStep Keyboard value loaded!"
 	fi
 	local passwords="$(sed '
 		/<passwords>/,/<\/passwords>/!d
 		/^</d
 		' "$answerFile")"
  		[ -n "$passwords" ] \
-			&& LogMaker "MSG" "SystemInstallation 01: Password(s) value loaded!" \
-			|| LogMaker "ERR" "SystemInstallation 01: No root password defined!"
+			&& LogMaker "MSG" "$logStep Password(s) value loaded!" \
+			|| LogMaker "ERR" "$logStep No root password defined!"
 	local users="$(sed '
 		/<users>/,/<\/users>/!d
 		/^</d
 		' "$answerFile")"
 		[ -n "$users" ] \
-			&& LogMaker "MSG" "SystemInstallation 01: User(s) value loaded!" \
-			|| LogMaker "WAR" "SystemInstallation 01: No users will be add in target system"
+			&& LogMaker "MSG" "$logStep User(s) value loaded!" \
+			|| LogMaker "WAR" "$logStep No users will be add in target system"
 	local locales="$(sed '
 		/<locales>/,/<\/locales>/!d
 		/^</d
@@ -238,9 +205,9 @@ SystemInstallation(){
 	if [ -z "$locales" ]
 	then
 		locales='s/^#en_US/en_US/'
-		LogMaker "WAR" "SystemInstallation 01: No locales defined! 'en_US.UTF-8' loaded"
+		LogMaker "WAR" "$logStep No locales defined! 'en_US.UTF-8' loaded"
 	else
-		LogMaker "MSG" "SystemInstallation 01: Locale(s) value loaded!"
+		LogMaker "MSG" "$logStep Locale(s) value loaded!"
 	fi
 	local repositories="$(sed '
 		/<repositories>/,/<\/repositories>/!d
@@ -250,9 +217,9 @@ SystemInstallation(){
 	if [ -z "$repositories" ]
 	then
 		repositories='s/^#S/S/'
-		LogMaker "WAR" "SystemInstallation 01: No repositories defined! All repositories on mirrorlist file will be set."
+		LogMaker "WAR" "$logStep No repositories defined! All repositories on mirrorlist file will be set."
 	else
-		LogMaker "MSG" "SystemInstallation 01: Repositores value loaded!"
+		LogMaker "MSG" "$logStep Repositores value loaded!"
 	fi
 	local -x packages="$(sed '
 		/<packages>/,/<\/packages>/!d
@@ -261,140 +228,86 @@ SystemInstallation(){
 	if [ -z "$packages" ]
 	then
 		packages=''
-		LogMaker "WAR" "SystemInstallation 01: No packages defined! Only 'base' package will be installed."
+		LogMaker "WAR" "$logStep No packages defined! Only 'base' package will be installed."
 	else
-		LogMaker "MSG" "SystemInstallation 01: Packages value loaded!"
-	fi
-	local mkinitcpioHooks
-	if [ "$(pvs | wc -l)" -gt 1 ] 
-	then
-		mkinitcpioHooks="/^HOOKS=/ s/block/block lvm2/;"
-		LogMaker "MSG" "SystemInstallation 01: Lvm2 support added in mkinitcpio!"
-	fi
-	if [ -e /proc/mdstat ] 
-	then
-		mkinitcpioHooks="$mkinitcpioHooks /^HOOKS=/ s/block/block mdadm/"
-		LogMaker "MSG" "SystemInstallation 01: Raid (mdadm) support added in mkinitcpio!"
+		LogMaker "MSG" "$logStep Packages value loaded!"
 	fi
 
-	#Stage02: Running pre script
+#---/ SystemInstallation 02: Generating user custom pre-scripts and pos-script scripts /---
 	logStep="SystemInstallation 02:"
-	LogMaker "LOG" "$logStep Starting stage 'Running pre script before start (<pre-script>).'"
-	RunArgumentAsScript "$(sed '
-		/^<pre-script>/,/^<\/pre-script>/!d
-		/^</d
-		' "$answerFile")"
+	LogMaker "LOG" "$logStep Starting stage 'Generating user custom 'pre-script' and 'pos-script' scripts"
+	MakePreScript "$preScript" "$answerFile"
+	MakePosScript "$posScript" "$answerFile"
 
-	#Stage03: Prepare environment to support installation
+#---/ SystemInstallation 03: Prepare environment to support installation /---
 	logStep="SystemInstallation 03:"
 	LogMaker "LOG" "$logStep Starting stage 'Prepare environment to support installation.'"
-	sed -i 's/^S/#S/' $fileMirrorlistOnRoot \
-		&& LogMaker "MSG" "$logStep Disabled all repositories on '$fileMirrorlistOnRoot'!" \
-		|| LogMaker "ERR" "$logStep Impossible to disabled all repositories on '$fileMirrorlistOnRoot'!"
-	eval "sed -i '$repositories' $fileMirrorlistOnRoot" \
-		&& LogMaker "MSG" "$logStep Repositories pre-defined has been enabled on '$fileMirrorlistOnRoot'!" \
-		|| LogMaker "ERR" "$logStep Impossible to set repositories on '$fileMirrorlistOnRoot'!"
-	if [ "$multilib" == "yes" ]
-	then
-		sed -i '/^#\[multilib\]/,/#Include/ s/^#//' $filePacmanConfOnRoot \
-			&& LogMaker "MSG" "$logStep Multilib support enabled in '$filePacmanConfOnRoot'" \
-			|| LogMaker "ERR" "$logStep Impossible to enable multilib support in '$filePacmanConfOnRoot'" 
-	fi
+	SetRepositories " " "$multilib" "$repositories"
 
-	#Stage04: Install basic packages
-	LogMaker "LOG" "SystemInstallation 04: Starting stage 'Install basic packages'"
-	pacstrap $dirTarget base grub $intelUcode \
-		&& LogMaker "MSG" "SystemInstallation 04: Arch Linux base system was successfully installed!" \
-		|| LogMaker "ERR" "SystemInstallation 04: Impossible to install Arch Linux base system!"
+#---/ SystemInstallation 04: Running pre script /---
+	logStep="SystemInstallation 04:"
+	LogMaker "LOG" "$logStep Starting stage 'Running pre script before start (<pre-script>).'"
+	bash "$preScript"
 
-	#Stage04: Set up the installed environment
-	LogMaker "LOG" "SystemInstallation 05: Starting stage 04: Set up the installed environment"
-	genfstab -p -U $dirTarget >> $fileFstab \
-		&& LogMaker "MSG" "SystemInstallation 05: /etc/fstab generated" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to generate /etc/fstab "
-	eval "sed -ri '$locales' $fileLocaleGen" \
-		&& LogMaker "MSG" "SystemInstallation 05: Locales defined in /etc/locales.gen" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set locales in /etc/locales.gen"
-	sed -i 's/^S/#S/' $fileMirrorlistOnMounted \
-		&& LogMaker "MSG" "SystemInstallation 05: Disable all repositories in /etc/pacman.d/mirrorlist" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to disable all repositories in /etc/pacman.d/mirrorlist"
-	eval "sed -i '$repositories' $fileMirrorlistOnMounted" \
-		&& LogMaker "MSG" "SystemInstallation 05: Repositories defined in /etc/pacman.d/mirrorlist" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set repositories in /etc/pacman.d/mirrorlist"
-	echo "LANG=$language" > $fileLocaleConf \
-		&& LogMaker "MSG" "SystemInstallation 05: Language defined in /etc/locale.conf" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set language in /etc/locale.conf"
-	echo "KEYMAP=$keyboard" > $fileVconsole \
-		&& LogMaker "MSG" "SystemInstallation 05: Keyboard layout defined in /etc/vconsole.conf" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set keyboard layout in /etc/vconsole.conf"
-	echo "$hostname" > $fileHostname \
-		&& LogMaker "MSG" "SystemInstallation 05: Hostname defined in /etc/hostname" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set hostname in /etc/hostname"
-	echo -e "127.0.0.1\t${hostname}.localdomain\t$hostname" >> $fileHosts \
-		&& LogMaker "MSG" "SystemInstallation 05: Local DNS defined in /etc/hosts" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set local DNS in /etc/hosts"
-	if [ -n "$mkinitcpioHooks" ]
-	then
-		eval "sed -i '$mkinitcpioHooks' $fileMkinitcpioConf" \
-			&& LogMaker "MSG" "SystemInstallation 05: Hooks detected are defined in /etc/mkinitcpio.conf" \
-			|| LogMaker "ERR" "SystemInstallation 05: Impossible to set hooks in /etc/mkinitcpio.conf"
-	fi
-	if [ "$multilib" == "yes" ]
-	then
-		sed -i '/^#\[multilib\]/,/#Include/ s/^#//' $filePacmanConfOnMounted\
-			&& LogMaker "MSG" "SystemInstallation 05: Multilib support enabled in '$filePacmanConfOnMounted'" \
-			|| LogMaker "ERR" "SystemInstallation 05: Impossible to enable multilib support in '$filePacmanConfOnMounted'" 
-	fi
-	arch-chroot $dirTarget ln -sf /usr/share/zoneinfo/$timezone /etc/localtime \
-		&& LogMaker "MSG" "SystemInstallation 05: Timezone defined in /etc/localtime" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set timezone in /etc/localtime"
-	arch-chroot $dirTarget hwclock --systohc \
-		&& LogMaker "MSG" "SystemInstallation 05: Hardware clock defined and /etc/adjtime created" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to set hardware clock"
-	arch-chroot $dirTarget locale-gen \
-		&& LogMaker "MSG" "SystemInstallation 05: Locales generated" \
-		|| LogMaker "ERR" "SystemInstallation 05: Impossible to generate locales"
+#---/ SystemInstallation 05: Running pre script /---
+	logStep="SystemInstallation 05:"
+	LogMaker "LOG" "$logStep Starting stage 'Verifying if root and boot are mounted and swap is active'"
+	IsTargetMounted
 
-	#Stage06: Change root password and add new users.
+#---/ SystemInstallation 06: Installing basic packages /---
 	logStep="SystemInstallation 06:"
-	LogMaker "LOG" "$logStep Starting stage 'Change root password and add new users'"
-	while read useraddLine
-	do
-		eval arch-chroot $dirTarget useradd "$useraddLine"' || echo "erro ${useraddLine##* }" ' \
-			&& LogMaker "MSG" "$logStep User '${useraddLine##* }' added" \
-			|| LogMaker "ERR" "$logStep Impossible to add user '${useraddLine##* }'"
-	done <<<"$users"
-	chpasswd -e -R $dirTarget <<<"$passwords" \
-		&& LogMaker "MSG" "$logStep Passwords defined" \
-		|| LogMaker "ERR" "$logStep Some or all passwords was impossible to set"
+	LogMaker "LOG" "$logStep Starting stage 'Installing basic packages'"
+	PacStrap "$dirTarget" 
 
-	#Stage07: Set up the boot process
+#---/ SystemInstallation 07: Set up the installed environment /---
 	logStep="SystemInstallation 07:"
-	LogMaker "LOG" "$logStep Starting stage 'Set up the boot process'"
-	arch-chroot $dirTarget mkinitcpio -p linux \
-		&& LogMaker "MSG" "$logStep RAM filesystem generated (mkinitcpio)" \
-		|| LogMaker "ERR" "$logStep Impossible to generate RAM filesystem (mkinitcpio)"
-	SetGrubOnTarget "$diskBoot" "$grubArgs"
+	LogMaker "LOG" "$logStep Starting stage 'Set up the installed environment'"
+	SetFstab "$dirTarget"
+	SetRepositories "$dirTarget" "$multilib" "$repositories"
+	SetLanguage "$dirTarget" "$language"
+	SetKeymap "$dirTarget" "$keyboard"
+	SetHostname "$dirTarget" "$hostname"
+	SetMkinitcpioHooks "$dirTarget"
+	SetTimezone "$dirTarget" "$timezone"
+	SetHardwareClock "$dirTarget"
+	SetLocales "$dirTarget" "$locales"
 
-	#Stage08: Set up the first boot
+#---/ SystemInstallation 08: Setting up the boot process /---
 	logStep="SystemInstallation 08:"
-	LogMaker "LOG" "$logStep Starting stage 'Set up for the first boot'"
-	SetScriptToRunOnFirstBoot "$fileFirstBootScriptOnTarget"
-	CreateFirstBootScript "$fileFirstBootScriptModel" "$fileFirstBootScriptOnTarget"
+	LogMaker "LOG" "$logStep Starting stage 'Setting up the boot process'"
+	MakeMkinitcpio "$dirTarget"
+	SetGrubOnTarget "$grubArgs"
 
-	#Stage09: Running pos script
+#---/ SystemInstallation 09: Setting up the first boot /---
 	logStep="SystemInstallation 09:"
-	LogMaker "LOG" "$logStep Starting stage 'Running pos script (<pos-script>).'"
-	RunArgumentAsScript "$(sed '
-		/^<pos-script>/,/^<\/pos-script>/!d
-		/^</d
-		' "$answerFile")"
+	LogMaker "LOG" "$logStep Starting stage 'Set up for the first boot'"
+	DownloadPackages "$dirTarget" "$packages"
+	SetScriptToRunOnFirstBoot "$dirTarget" "$fileFirstBootScript"
+	MakeFirstBootScript "$fileFirstBootScript" "$packages"
 
-	#Stage10: rebooting
-	LogMaker "LOG" "SystemInstallation 10: Finalizing the LOG and restarting"
+#---/ SystemInstallation 10: Running pos script /---
+	logStep="SystemInstallation 10:"
+	LogMaker "LOG" "$logStep Starting stage 'Running pos script (<pos-script>).'"
+	bash "$posScript"
+
+#---/ SystemInstallation 11:Change root password and add new users /---
+	logStep="SystemInstallation 11:"
+	LogMaker "LOG" "$logStep Starting stage 'Change root password and add new users'"
+	SetUsers "$dirTarget" "$users"
+	SetPasswords "$dirTarget" "$passwords"
+
+#---/ SystemInstallation 12: Generating user custom pre-scripts and pos-script /---
+	logStep="SystemInstallation 12:"
+	LogMaker "LOG" "$logStep Starting stage 'Generating user custom 'pre-initial' and 'pos-initial' scripts"
+	MakePreInitialScript "$dirTarget" "$answerFile"
+	MakePosInitialScript "$dirTarget" "$answerFile"
+
+#---/ SystemInstallation 13: Rebooting /---
+	logStep="SystemInstallation 13:"
+	LogMaker "LOG" "$logStep Finalizing the LOG and restarting"
 	cp "$LogFile" "$dirTarget/var/log/"
-	#umount -R $dirTarget
-	#shutdown -r now
+	umount -R $dirTarget
+	shutdown -r now
 }
 CollectingDataFromMenu(){
 	local step=Keymap
@@ -577,14 +490,14 @@ main() {
 						 	  exit
 						 	  ;;
 			-a|--answer-file) LogMaker "LOG" "Piece Of Cake Installer has been started in automatic mode"
-							  ValidatingEnvironment --text-mode || exit 1
+							  ValidatingMinimumRequirement --text-mode || exit 1
 							  #SetNetworkConfiguration --text-mode
 							  SetDateAndTime --text-mode
 							  SystemInstallation $2
 							  exit
 						 	  ;;
 						  -g) LogMaker "LOG" "Piece Of Cake Installer has been started in GUI mode"
-							  ValidatingEnvironment || exit 1
+							  ValidatingMinimumRequirement || exit 1
 							  #SetNetworkConfiguration
 							  SetDateAndTime
 							  CollectingDataFromMenu 
