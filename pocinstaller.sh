@@ -137,10 +137,9 @@ SystemInstallation(){
 	local fileFirstBootScript="$dirTarget/root/first_boot.sh"
 	local preScript='/tmp/pre-script.sh'
 	local posScript='/tmp/pos-script.sh'
-	local -x logStep="SystemInstallation 01:"
 
 #---/ SystemInstallation 01: Starting stage Collecting information from answer file /---
-	logStep="SystemInstallation 01:"
+	local -x logStep="SystemInstallation 01:"
 	LogMaker "LOG" "$logStep Starting stage 'Collecting information from answer file'."
 
 	# It's collect hostname, language, keyboard, timezone, multilib, keymap
@@ -252,7 +251,7 @@ SystemInstallation(){
 #---/ SystemInstallation 05: Running pre script /---
 	logStep="SystemInstallation 05:"
 	LogMaker "LOG" "$logStep Starting stage 'Verifying if root and boot are mounted and swap is active'"
-	IsTargetMounted
+	IsTargetMounted --text-mode
 
 #---/ SystemInstallation 06: Installing basic packages /---
 	logStep="SystemInstallation 06:"
@@ -423,39 +422,39 @@ CollectingDataFromMenu(){
 					  ;;
 		esac
 	done
-	[ -n "$hostname" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Hostname OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No hostname defined!"
-	[ -n "$timezone" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Timezone OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No Timezone defined!"
-	[ -n "$locale" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Locale OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No locale defined!"
-	[ -n "$language" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Language OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No language defined!"
-	[ -n "$keymap" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Keymap OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No keymap defined!"
-	[ -n "$repositories" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Repositories OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No repositories defined!"
-	[ -n "$rootPassword" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Root Password OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No root password defined!"
-	[ -n "$usersList" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Users list OK!" \
-		|| LogMaker "LOG" "GUI Menu debug: No users list defined!"
-	[ -n "$multilib" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Multilib OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No multilib defined!"
-	[ -n "$usersPassword" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Users passwords OK!" \
-		|| LogMaker "LOG" "GUI Menu debug: No users passwords defined!"
-	[ -n "$profile" ] \
-		&& LogMaker "LOG" "GUI Menu Debug: Profile OK!" \
-		|| LogMaker "ERR" "GUI Menu debug: No profile defined!"
+#	[ -n "$hostname" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Hostname OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No hostname defined!"
+#	[ -n "$timezone" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Timezone OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No Timezone defined!"
+#	[ -n "$locale" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Locale OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No locale defined!"
+#	[ -n "$language" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Language OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No language defined!"
+#	[ -n "$keymap" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Keymap OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No keymap defined!"
+#	[ -n "$repositories" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Repositories OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No repositories defined!"
+#	[ -n "$rootPassword" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Root Password OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No root password defined!"
+#	[ -n "$usersList" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Users list OK!" \
+#		|| LogMaker "LOG" "GUI Menu debug: No users list defined!"
+#	[ -n "$multilib" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Multilib OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No multilib defined!"
+#	[ -n "$usersPassword" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Users passwords OK!" \
+#		|| LogMaker "LOG" "GUI Menu debug: No users passwords defined!"
+#	[ -n "$profile" ] \
+#		&& LogMaker "LOG" "GUI Menu Debug: Profile OK!" \
+#		|| LogMaker "ERR" "GUI Menu debug: No profile defined!"
 	whereAmI='|\ZrStartAgain<-Summary->\Z1CreateAnswerFile\Z0->Installation\ZR'
 	profileFile=$(MakeAnswerFile "$profile")
 	whereAmI='|\ZrStartAgain<-Summary->CreateAnswerFile->\Z1Installation\Z0\ZR'
@@ -464,7 +463,7 @@ CollectingDataFromMenu(){
 		LogMaker "LOG" "GUI Menu: Calling installation process!"
 		SystemInstallation $profileFile || return
 	else
-		LogMaker "LOG" "GUI Menu: Exited!"
+		LogMaker "LOG" "GUI Menu: User exited!"
 	fi
 }
 main() {
@@ -491,14 +490,15 @@ main() {
 						 	  ;;
 			-a|--answer-file) LogMaker "LOG" "Piece Of Cake Installer has been started in automatic mode"
 							  ValidatingMinimumRequirement --text-mode || exit 1
-							  #SetNetworkConfiguration --text-mode
+							  SetNetworkConfiguration --text-mode
 							  SetDateAndTime --text-mode
 							  SystemInstallation $2
 							  exit
 						 	  ;;
 						  -g) LogMaker "LOG" "Piece Of Cake Installer has been started in GUI mode"
 							  ValidatingMinimumRequirement || exit 1
-							  #SetNetworkConfiguration
+							  IsTargetMounted
+							  SetNetworkConfiguration
 							  SetDateAndTime
 							  CollectingDataFromMenu 
 							  exit
@@ -510,6 +510,3 @@ main() {
 	done
 }
 main $@
-
-
-

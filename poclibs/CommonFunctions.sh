@@ -101,7 +101,9 @@ WaitingNineSeconds(){ #Print 8 to 0 per second while user wait
 	done
 	echo
 }
-IsTargetMounted(){ #Verify if root and boot are mounted and swap is active.
+IsTargetMounted(){ #Use: --text-mode to show messages on console
+	local title="Target validation"
+	local text="Check if everything is ok:\n"
 	local mountedRootDir="$(df --output=target "$DirTarget" 2>/dev/null | grep "$DirTarget")"
 	local mountedBootDir="$(df --output=target "$DirBoot" 2>/dev/null | grep "$DirBoot")"
 	local partitionRootSize="$(df --output=size -BM /mnt 2>/dev/null | tail -1)"
@@ -109,6 +111,7 @@ IsTargetMounted(){ #Verify if root and boot are mounted and swap is active.
 	local swapActive="$(grep -Eo '/dev/.{8}' /proc/swaps)"
 	local dirTarget="$DirTarget"
 	local dirBoot="$DirBoot"
+	local textMode="$1"
 	local text errorText
 	#Is partition mounted for root installation?
 	if [ "$mountedRootDir" == "$dirTarget" ]
@@ -149,18 +152,33 @@ IsTargetMounted(){ #Verify if root and boot are mounted and swap is active.
 	fi
 	if [ -n "$errorText" ]
 	then
-		LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText"
+		if [ -n "$textMode" ]
+		then
+			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText"
+		else
+			GuiMessageBox "$title" "$text\nSome requirements have not been met:\n${errorText}
+				\Z1Impossible to continue\Z0!"
+			LogMaker "ERR" "SystemCheck: Some requirements have not been met:\n$errorText" > /dev/null
+		fi
 	else
-		text="$(sed -r '
-			s/\\Z1/\\033[31m/
-			s/\\Z0/\\033[0m/
-			' <<<"$text")"
-		LogMaker "MSG" "SystemCheck: $text"
+		if [ -n "$textMode" ]
+		then
+			text="$(sed -r '
+				s/\\Z1/\\033[31m/
+				s/\\Z0/\\033[0m/
+				' <<<"$text")"
+			LogMaker "MSG" "SystemCheck: $text"
+			WaitingNineSeconds
+		else
+			LogMaker "LOG" "SystemCheck: $text"
+			GuiMessageBox "$title" "$text"
+			return 
+		fi
 	fi
 }
-ValidatingMinimumRequirement(){ #Verify minimal system requirements for Arch
+ValidatingMinimumRequirement(){ #Use: --text-mode to show messages on console
 	local title="Environment Validation"
-	local text="Checking if everything is ok:\n"
+	local text="Check if everything is ok:\n"
 	local disksAndSizes="$(lsblk --nodeps -n -b -o NAME,SIZE)"
 	local memorySize="$(awk '$1 == "MemTotal:" {print $2}' /proc/meminfo)"
 	local textMode="$1"
@@ -175,9 +193,9 @@ ValidatingMinimumRequirement(){ #Verify minimal system requirements for Arch
 	#Bios or EFI?
 	if IsEfi
 	then
-		text="$text* It has a EFI support\n"
+		text="$text* It has EFI support\n"
 	else
-		text="$text* It has a bios support only\n"
+		text="$text* It has bios support only\n"
 	fi
 	#There is a one or more disks greater than 10GB
 	while read disk size

@@ -77,7 +77,7 @@ MakeAnswerFile(){ #Create a answer file in /tmp with collected data
 	local profileFile="$1"
 	local answerFile="/tmp/modified_${profileFile##*/}"
 	local text="Answer file '$answerFile' generated! You can use this file to
-		make automatic mass installs or a new one." 
+		make automatic mass installs or a new automatic one." 
 	eval 'cat <<-_eof_ >"$answerFile"
 	'"$(cat $profileFile)"'	
 	_eof_'
@@ -129,13 +129,13 @@ MakePreInitialScript(){ #Use: MakePreInitialScript /target /path/answerfile
 		/^<pre-initial>/,/^<\/pre-initial>/!d
 		s@^<pre-initial>@exec 2> '"${script%.*}.log"'\nset -x@
 		s/^<\/pre-initial>/set +x/ 
-		w '"$target/$script"'
+		w '"${target}${script}"'
 		' $answerFile
 	then
-		chmod a+x "$target/$script"
-		LogMaker "MSG" "$logStep '$target/$script' created!"
+		chmod a+x "${target}${script}"
+		LogMaker "MSG" "$logStep '${target}${script}' created!"
 	else
-		LogMaker "ERR" "$logStep Impossible to create '$target/$script'!"
+		LogMaker "ERR" "$logStep Impossible to create '${target}${script}'!"
 	fi
 }
 MakePosInitialScript(){ #Use: MakePosInitialScript /target /path/answerfile
@@ -148,13 +148,13 @@ MakePosInitialScript(){ #Use: MakePosInitialScript /target /path/answerfile
 		/^<pos-initial>/,/^<\/pos-initial>/!d
 		s@^<pos-initial>@exec 2> '"${script%.*}.log"'\nset -x@
 		s/^<\/pos-initial>/set +x/ 
-		w '"$target/$script"'
+		w '"${target}${script}"'
 		' $answerFile
 	then
-		chmod a+x "$target/$script"
-		LogMaker "MSG" "$logStep '$target/$script' created!"
+		chmod a+x "${target}${script}"
+		LogMaker "MSG" "$logStep '${target}${script}' created!"
 	else
-		LogMaker "ERR" "$logStep Impossible to create '$target/$script'!"
+		LogMaker "ERR" "$logStep Impossible to create '${target}${script}'!"
 	fi
 }
 MakeMkinitcpio(){ #Use: MakeMkinitcpio "/target/system/"

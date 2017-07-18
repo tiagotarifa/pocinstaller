@@ -113,9 +113,14 @@ PosInitial(){
 	fi
 }
 Installation(){
-	pacman -S --noconfirm $Packages \
-		&& LogMaker "LOG" "$Step Installation packages has been finish!" \
-		|| LogMaker "ERR" "$Step Impossible to install packages!" \"
+	if [ -n "$Packages" ]
+	then
+		pacman -S --noconfirm $Packages \
+			&& LogMaker "LOG" "$Step Installation packages has been finish!" \
+			|| LogMaker "ERR" "$Step Impossible to install packages!" \"
+	else
+		LogMaker "LOG" "$Step There is no packages to install!"
+	fi
 }
 Finishing(){
 	LogMaker "LOG" "$Step Finishing installation!"
