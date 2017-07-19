@@ -64,8 +64,11 @@ readonly HelpMessage="    Arch Linux installer guided graphically or automatical
     OPTIONS:
        -a, --answer-file  answerFile.cfg
                       Do a automatic install oriented by a answer file. 
-       -h, --help     Show this help and exit
-       -V, --version  Show version and exit
+       -T, --no-time  Disable manual (gui) and automatic (from internet)
+                      time setting.
+       -g, --gui      start in 'Graphical' User Interface mode.
+       -h, --help     Show this help and exit.
+       -V, --version  Show version and exit.
     NOTES:
        -The graphical environment will start if no arguments are passed.
        -Enter the graphical mode to make an answer file. It will be
@@ -467,46 +470,56 @@ CollectingDataFromMenu(){
 	fi
 }
 main() {
-	local args noTime
-	args=$(getopt -u -o h,V,a: --long help,version,answer-file: -n "$0" -- "$@") \
-		|| exit 1
-	#Looking for -h or --help option
-	grep -Eqs -- '-h|--help' <<<"$args"	\
-		&& args='-h'
-	#Looking for -V or --version
-	grep -Eqs -- '-V|--version' <<<"$args"	\
-		&& args='-V'
-	#If no arguments start graphical interface
-	[ -z "$1" ] && args='-g'
+	local args noTime runAutomatic runGui answerFile
+	if ! args=$(getopt -u -o h,V,T,g,a: --long help,version,--no-time,gui,answer-file: -n "$0" -- "$@" 2>&1)
+	then
+		echo $args
+		exit 1
+	fi
 	eval set -- "$args"
 	while :
 	do
 		case $1 in
-					 	  -h) echo "$HelpMessage"
+				   -h|--help) echo "$HelpMessage"
 						 	  exit
 						 	  ;;
-				 	 	  -V) grep -m1 -Eo 'Version:.+' "$0"
+				-V|--version) grep -m1 -Eo 'Version:.+' "$0"
 						 	  exit
 						 	  ;;
-			-a|--answer-file) LogMaker "LOG" "Piece Of Cake Installer has been started in automatic mode"
-							  ValidatingMinimumRequirement --text-mode || exit 1
-							  SetNetworkConfiguration --text-mode
-							  SetDateAndTime --text-mode
-							  SystemInstallation $2
-							  exit
+			-a|--answer-file) runAutomatic=yes answerFile="$2"
+							  [ -n "$runGui" ] \
+								  && LogMaker "ERR" "You can't use '-a|--answer-file' with '-g|--gui'"
+							  shift 2
 						 	  ;;
-						  -g) LogMaker "LOG" "Piece Of Cake Installer has been started in GUI mode"
-							  ValidatingMinimumRequirement || exit 1
-							  IsTargetMounted
-							  SetNetworkConfiguration
-							  SetDateAndTime
-							  CollectingDataFromMenu 
-							  exit
+					-g|--gui) runGui=yes
+							  [ -n "$runAutomatic" ] \
+								  && LogMaker "ERR" "You can't use '-a|--answer-file' with '-g|--gui'"
+							  shift 
 						  	  ;;
-						   *) echo -e "Error! Illegal argument.\n$HelpMessage"
+				-T|--no-time) noTime=yes
+							  shift
+							  ;;
+						  --) break
+							  ;;
+						   *) echo -e "Error! Illegal argument '$@'.\n$HelpMessage"
 							  exit 1
 							  ;;
 		esac
 	done
+	if [ -n "$runAutomatic" ]
+	then
+		LogMaker "LOG" "Piece Of Cake Installer has been started in automatic mode"
+		ValidatingMinimumRequirement --text-mode || exit 1
+		SetNetworkConfiguration --text-mode 
+		[ -z "$noTime" ] && SetDateAndTime --text-mode
+		SystemInstallation $answerFile
+		exit
+	fi
+	LogMaker "LOG" "Piece Of Cake Installer has been started in GUI mode"
+	ValidatingMinimumRequirement || exit 1
+	IsTargetMounted
+	SetNetworkConfiguration
+	[ -z "$noTime" ] && SetDateAndTime
+	CollectingDataFromMenu 
 }
 main $@

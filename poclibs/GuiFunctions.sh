@@ -261,6 +261,7 @@ GuiPasswordBox(){ #Use: GuiPasswordBox "Window's Title" "Text to show"
 		--stdout $hline					\
 		--ok-label "$okLabel"			\
 		--cancel-label "$cancelLabel"	\
+		--insecure						\
 		--trim --colors					\
 		--aspect 80						\
 		--title "$title"				\
@@ -385,6 +386,23 @@ GuiTimeBox(){ #Use: GuiTimeBox "Window's Title" "Text to show" | Return: '%H%M'
 		--title "$title"				\
 		--time-format '%H%M'			\
 		--timebox "$text" 0 $cols
+}
+GuiTimer(){ #Use: GuiTimer "Window's Title" "Text to show" Seconds
+	local title="$1"
+	local text="$2"
+	local seconds="$3"
+	local backTitle="$BackTitle"
+	local cols=60
+	local lines=10
+	dialog							\
+		--backtitle "$backTitle"	\
+		--trim 						\
+		--colors					\
+		--nook						\
+		--nocancel					\
+		--aspect 80					\
+		--title "$title"			\
+		--pause "$text" $lines $cols $seconds
 }
 #--------/ Not implemented /----------------------------------------------------
 GuiIntro(){ #Do not use. In development...

@@ -62,28 +62,28 @@ SetDHCP(){ #Use: SetDHCP <enpXsX|wlpXsX|or any name for this device>
 	local textError2="Could not set DHCP address for $device! Try Fixed IP..."
 	local titleSuccess="DHCP"
 	local textSuccess="DHCP returns this ip address for $device"
-	local ip
-	local dhcpReleaseCommand="$(type -p dhcpcd) -k" \
-		|| local dhcpReleaseCommand="$(type -p dhclient) -r"
-	if [ -z "${dhcpReleaseCommand%-*}" ]
+	local ip count
+	local dhcpCommand="$(type -p dhcpcd)" \
+		|| local dhcpCommand="$(type -p dhclient)"
+	if [ -z "$dhcpCommand" ]
 	then
 		GuiMessage "$titleError" "$textError" || return
 		return 1
-	else
-		eval $dhcpReleaseCommand $device
-		local dhcpCommand="${dhcpReleaseCommand%-*}"
 	fi
-	eval $dhcpCommand $device
-	if [ $? -eq 0 ]
-	then
-		ip="$(ip addr show $device \
-			| grep -Eo -m1 '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}/(8|16|24)')"
-		GuiMessageBox "$titleSuccess" "$textSuccess\nIP: $ip\n" || return
-	else
-		GuiMessageBox "$titleError" "$textError2" || return
-		LogMaker "WAR" "Network: Impossíble to get IP from dhcp server!" > /dev/null
-		return 1
-	fi
+	for ((count=0;count<4;count++))
+	do
+		if $dhcpCommand $device
+		then
+			ip="$(ip addr show $device \
+				| grep -Eo -m1 '([12]?[0-9]?[0-9])(\.[12]?[0-9]?[0-9]){3}/(8|16|24)')"
+			GuiMessageBox "$titleSuccess" "$textSuccess\nIP: $ip\n" 
+			break
+		else
+			GuiMessageBox "$titleError" "$textError2"
+			LogMaker "WAR" "Network: Impossible to get IP from dhcp server!" > /dev/null
+			return 1
+		fi
+	done
 	LogMaker "LOG" "Network: Set '$ip' on '$device'."
 }
 SetFixedIP(){ #Use: SetFixedIP <enp1s3|wlp3s0b1>
@@ -166,14 +166,24 @@ SetWireless(){ #Use: SetWireless wirelessDeviceName
 		while :
 		do
 			wifiList=''
-			wpa_cli scan > /dev/null 2>&1
-			while read gb1 gb2 quality gb3 wifi
-			do
-				wifiList="$wifiList $wifi ${quality#-} off"
-			done < <(wpa_cli scan_results | grep -E '^[[:alnum:]][[:alnum:]]:')
+			if wpa_cli -i $device scan > /dev/null 2>&1
+			then
+				GuiTimer "Waiting" "Please wait while it trying to scan wireless networks" 5
+				while read gb1 gb2 quality gb3 wifi
+				do
+					wifiList="$wifiList $wifi ${quality#-} off"
+				done < <(wpa_cli -i $device scan_results | grep -E '^[[:alnum:]][[:alnum:]]:')
+			fi
+			if [ -z "$wifiList" ]
+			then
+				GuiYesNo "Error" "No Access point found. Do you want to try again?" \
+					|| return 
+			else
+				wifiSelected="$(GuiRadiolist "$title" "Select a wireless lan" $wifiList)" \
+					|| continue
+				break
+			fi
 		done
-		wifiSelected="$(GuiRadiolist "$title" "Select a wireless lan" "$wifiList")" \
-			|| return 1
 	else
 		local textError="wpa_supplicant gave a error when it's tried to start."
 		GuiMessageBox "Error" "$textError" \
@@ -181,11 +191,14 @@ SetWireless(){ #Use: SetWireless wirelessDeviceName
 	fi
 	wifiPassword="$(GuiPasswordBox "$title" "Input a password for '$wifiSelected'")" \
 		|| return 
+	(
 	networkID="$(wpa_cli -i "$device" add_network)"
 	wpa_cli -i "$device" set_network $networkID ssid \"$wifiSelected\"
-	wpa_cli -i "$device" set_network $networkID psk \"$wifiPassword\"
+	wpa_cli -i "$device" set_network $networkID psk \"$wifiPassword\" 
 	wpa_cli -i "$device" enable_network $networkID
 	wpa_cli -i "$device" save_config
+	) > /dev/null
+	GuiTimer "Waiting" "Please wait wireless interface sync with access point" 5
 	SetDHCP "$device"
 }
 SetNetworkConfiguration(){ #Set up the network for installation | Use: --text-mode in automatic install
@@ -197,31 +210,34 @@ SetNetworkConfiguration(){ #Set up the network for installation | Use: --text-mo
 	local textMode="$1"
 	local choice
 
-	if ping -c1 "$siteToPing" > /dev/null 2>&1 
-	then
-		return 0
-	else
-		if [ -n "$textMode" ] 
-		then 
-			LogMaker "MSG" "Network: There is no internet conection. Trying to install without it..."
-			WaitingNineSeconds
+	while :
+	do
+		[ -z "$textMode" ] && GuiTimer "Waiting" "Checking internet connection...Please wait" 0
+		if ping -4 -c1 "$siteToPing" > /dev/null 2>&1 
+		then
 			return 0
 		else
-		LogMaker "LOG" "Network: There is no internet conection. Trying to configure network..."
-		fi
-
-		if GuiYesNo "$title" "There is no network connection. Do you want to configure lan?"
-		then
-			choice="$(GuiMenu "$title" "$text" "Ethernet Wireless")"
-			case $choice in
-				Ethernet) SetEthernet "$ethernetDevice" ;;
-				Wireless) SetWireless "$wifiDevice" ;;
-			esac 
-		else
-			GuiMessageBox "$title" "There is no internet connection, but I'll leave you alone."
-			return 1
-		fi
-	fi
+			if [ -n "$textMode" ] 
+			then 
+				LogMaker "MSG" "Network: There is no internet conection. Trying to install without it..."
+				WaitingNineSeconds
+				return 0
+			else
+				LogMaker "LOG" "Network: There is no internet conection. Trying to configure network..."
+			fi
+				if GuiYesNo "$title" "There is no network connection. Do you want to configure lan?"
+				then
+					choice="$(GuiMenu "$title" "$text" "Ethernet Wireless")"
+					case $choice in
+						Ethernet) SetEthernet "$ethernetDevice" ;;
+						Wireless) SetWireless "$wifiDevice" 	;;
+					esac 
+				else
+					GuiMessageBox "$title" "There is no internet connection, but I'll leave you alone."
+					return 1
+				fi
+			fi
+	done
 }
 #--------/ Ordinary functions /-------------------------------------------------
 SetDateAndTime(){ #Set up date and time automatic(internet) or manual
@@ -232,7 +248,8 @@ SetDateAndTime(){ #Set up date and time automatic(internet) or manual
 	local textMode="$1"
 	local date time
 
-	if ping -c1 "$siteToPing" > /dev/null 2>&1 
+	[ -z "$textMode" ] && GuiTimer "Waiting" "Checking internet connection...Please wait" 0
+	if ping -4 -c1 "$siteToPing" > /dev/null 2>&1 
 	then
 		timedatectl set-ntp true
 	else
