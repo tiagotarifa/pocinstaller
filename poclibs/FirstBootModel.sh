@@ -50,7 +50,7 @@
 # 
 #--------/ History /------------------------------------------------------------
 # Legend: '-' for features and '+' for corrections
-#  Version: 1.0 released in 2017-07-12
+#  Version: 1.0 released in 2017-07-19
 #   -Network functions to fix IP and DHCP;
 #   -Set up grub according by system I.e: Efi(x86_64) or bios(x86)
 #   ...Many small others

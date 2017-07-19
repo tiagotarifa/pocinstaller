@@ -46,7 +46,7 @@
 # 
 #--------/ History /------------------------------------------------------------
 # Legend: '-' for features and '+' for corrections
-#  Version: 1.0 released in 2017-07-12
+#  Version: 1.0 released in 2017-07-19
 #   -Automatic or manual install;
 #   -Save defined configuration on 'answer file' to use for clone systems;
 #   -Support pre configured systems to make 'answer files' and save hours of work;

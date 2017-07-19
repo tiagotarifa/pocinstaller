@@ -46,7 +46,7 @@
 # 
 #--------/ History /------------------------------------------------------------
 # Legend: '-' for features and '+' for corrections
-#  Version: 1.0 released in 2017-07-12
+#  Version: 1.0 released in 2017-07-19
 #   -Log maker to make a log file with date and levels;
 #   -System validation for minimal requirements;
 #   ...Many small others

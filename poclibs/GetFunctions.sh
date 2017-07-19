@@ -49,7 +49,7 @@
 # 
 #--------/ History /------------------------------------------------------------
 # Legend: '-' for features and '+' for corrections
-#  Version: 1.0 released in 2017-07-12
+#  Version: 1.0 released in 2017-07-19
 #   -Validate information like hostname and passwords;
 #   -Summary suport with GetSummary;
 #   -Profiles support with GetProfiles;

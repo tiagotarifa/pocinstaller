@@ -47,7 +47,7 @@
 # 
 #--------/ History /------------------------------------------------------------
 #  Legend: '-' for features and '+' for corrections
-#    Version: 1.0 released in 2017-07-09
+#    Version: 1.0 released in 2017-07-19
 #     -Support to colors (see dialog's man);
 #     -Only show help line(--hline) if is need it;
 #     -Detect if lists has 2 or 3 itens and handle with that;

@@ -1,13 +1,12 @@
 #!/bin/bash
 #--------/ Header /-------------------------------------------------------------
-# Commonlib.sh: Functions to support all others functions and pocinstaller.sh
-# Site        : https://github.com/tiagotarifa/pocinstaller
-# Author      : Tiago Tarifa Munhoz
-# License     : GPL3
+# MakeFunctions.sh: Functions to support all others functions and pocinstaller.sh
+# Site            : https://github.com/tiagotarifa/pocinstaller
+# Author          : Tiago Tarifa Munhoz
+# License         : GPL3
 #
 #--------/ Description /--------------------------------------------------------
-#   This script has functions to handle with loging, create files, and
-# other stufs. 
+#   This script has functions to create others files. 
 #
 #--------/ Important Remarks /--------------------------------------------------
 #  To best view this code use Vim with this configuration settings (~/.vimrc):
@@ -46,10 +45,7 @@
 # 
 #--------/ History /------------------------------------------------------------
 # Legend: '-' for features and '+' for corrections
-#  Version: 1.0 released in 2017-07-12
-#   -Log maker to make a log file with date and levels;
-#   -System validation for minimal requirements;
-#   ...Many small others
+#  Version: 1.0 released in 2017-07-19
 #-------------------------------------------------------------------------------
 MakeFirstBootScript(){ #USE: /target/path/scripttomake.sh package01 package02 ...
 	local scriptToMake="$1"
